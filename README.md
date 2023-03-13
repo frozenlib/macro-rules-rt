@@ -19,7 +19,6 @@ let rule = Rule::new(from, to)?;
 let source = quote!(1 + 2);
 let result = rule.replace_all(source);
 assert_eq!(result.to_string(), quote!(1 * 5 + 2 * 5).to_string());
-Ok(())
 ```
 
 ## License
