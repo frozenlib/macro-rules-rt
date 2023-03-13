@@ -3,12 +3,13 @@ use parser::MacroTranscriberItems;
 use proc_macro2::{Delimiter, Ident, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 use std::collections::HashMap;
+use structmeta::Parse;
 use syn::{
     braced, bracketed,
     ext::IdentExt,
     parenthesized,
-    parse::{discouraged::Speculative, ParseStream, Parser},
-    parse2, Block, Expr, Item, Lifetime, Lit, Meta, Pat, Path, Result, Type, Visibility,
+    parse::{discouraged::Speculative, Parse, ParseStream, Parser},
+    Block, Expr, Item, Lifetime, Lit, Meta, Pat, Path, Result, Type, Visibility,
 };
 use syntax::{parse_macro_pat, parse_macro_stmt};
 
@@ -22,12 +23,13 @@ mod syntax;
 #[derive(Debug)]
 pub struct Matcher(PatternItems);
 
-impl Matcher {
-    /// Create a new `Matcher` from a `TokenStream`.
-    pub fn from_token_stream(tokens: TokenStream) -> Result<Self> {
-        Ok(Self(parse2::<MacroMatches>(tokens)?.to_pattern()?))
+impl Parse for Matcher {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Self(input.parse::<MacroMatches>()?.to_pattern()?))
     }
+}
 
+impl Matcher {
     fn try_match(&self, input: ParseStream) -> Result<Match> {
         self.0.try_match(input)
     }
@@ -319,18 +321,10 @@ fn insert_bind(
 }
 
 /// Replacement pattern corresponding to `MacroTranscriber` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
-#[derive(Debug)]
+///
+/// Does not include the outermost brace.
+#[derive(Debug, Parse)]
 pub struct Transcriber(MacroTranscriberItems);
-
-impl Transcriber {
-    /// Creates a new `Transcriber` from a `TokenStream`.
-    ///
-    /// The pattern corresponds to `MacroTranscriber` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html),
-    /// but does not include the outermost brace.
-    pub fn from_token_stream(tokens: TokenStream) -> Result<Self> {
-        Ok(Self(parse2::<MacroTranscriberItems>(tokens)?))
-    }
-}
 
 #[derive(Debug)]
 struct TranscriberItems {

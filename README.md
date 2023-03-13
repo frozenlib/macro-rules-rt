@@ -11,9 +11,10 @@
 ```rust
 use macro_rules_rt::{Matcher, Rule, Transcriber};
 use quote::quote;
+use syn::parse2;
 
-let from = Matcher::from_token_stream(quote!($e:literal))?;
-let to = Transcriber::from_token_stream(quote!($e * 5))?;
+let from: Matcher = parse2(quote!($e:literal))?;
+let to: Transcriber = parse2(quote!($e * 5))?;
 let rule = Rule::new(from, to)?;
 let source = quote!(1 + 2);
 let result = rule.replace_all(source);

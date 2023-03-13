@@ -1,6 +1,7 @@
 use macro_rules_rt::Matcher;
 use proc_macro2::TokenStream;
 use quote::quote;
+use syn::parse2;
 
 macro_rules! check_matcher {
     { $($input:tt)* } => {
@@ -8,7 +9,7 @@ macro_rules! check_matcher {
     };
 }
 fn check_matcher_raw(ts: TokenStream) {
-    Matcher::from_token_stream(ts.clone()).unwrap_or_else(|_| panic!("{}", ts.to_string()));
+    parse2::<Matcher>(ts.clone()).unwrap_or_else(|_| panic!("{}", ts.to_string()));
 }
 
 #[test]
