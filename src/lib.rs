@@ -273,14 +273,19 @@ impl RepPattern {
                     try_match_token(&fork, sep)?;
                 }
             }
-            is_next = true;
-
             if let Ok(m) = self.content.try_match(&fork) {
                 if m.is_exists {
                     ms.push(m);
                     input.advance_to(&fork);
+                    if self.op.is_zero_or_one() {
+                        break;
+                    }
+                    is_next = true;
                     continue;
                 }
+            }
+            if self.op.is_one_or_more() && !is_next {
+                bail!(input.span(), "expected at least one repetition")
             }
             break;
         }
@@ -317,7 +322,7 @@ impl TranscriberItems {
     fn get_bind(&self) -> Option<(String, Span)> {
         for item in &self.items {
             match item {
-                TranscriberItem::Token(_) => todo!(),
+                TranscriberItem::Token(_) => {}
                 TranscriberItem::Group(g) => {
                     if let Some((name, span)) = g.content.get_bind() {
                         return Some((name, span));

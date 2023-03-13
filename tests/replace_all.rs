@@ -10,10 +10,10 @@ macro_rules! check { {
         macro_rules! mr {
             { $($from)* } => { quote!($($to)*) };
         }
-        check_raw(quote!($($from)*), quote!($($to)*), quote!($($input)*), mr! { $($input)* })
+        check_eq(quote!($($from)*), quote!($($to)*), quote!($($input)*), mr! { $($input)* })
     };
 }
-fn check_raw(from: TokenStream, to: TokenStream, input: TokenStream, expected: TokenStream) {
+fn check_eq(from: TokenStream, to: TokenStream, input: TokenStream, expected: TokenStream) {
     let from_str = from.to_string();
     let to_str = to.to_string();
     let input_str = input.to_string();
@@ -194,6 +194,27 @@ fn repeat_zero_or_more() {
         { a, b, c },
     };
 }
+#[test]
+fn repeat_zero_or_more_fail() {
+    check_eq(
+        quote!($($a:ident)*@),
+        quote!($($a)*@@),
+        quote!(@),
+        quote!(@@),
+    );
+    check_eq(
+        quote!($($a:ident)*@),
+        quote!($($a)*@@),
+        quote!(a@),
+        quote!(a@@),
+    );
+    check_eq(
+        quote!($($a:ident)*@),
+        quote!($($a)*@@),
+        quote!(a a@),
+        quote!(a a@@),
+    );
+}
 
 #[test]
 fn repeat_one_or_more() {
@@ -210,11 +231,64 @@ fn repeat_one_or_more() {
 }
 
 #[test]
+fn repeat_one_or_more_fail() {
+    check_eq(
+        quote!($($a:ident)+@),
+        quote!($($a)+@@),
+        quote!(@),
+        quote!(@),
+    );
+    check_eq(
+        quote!($($a:ident)+@),
+        quote!($($a)+@@),
+        quote!(a@),
+        quote!(a@@),
+    );
+    check_eq(
+        quote!($($a:ident)*@),
+        quote!($($a)*@@),
+        quote!(a a@),
+        quote!(a a@@),
+    );
+}
+
+#[test]
 fn repeat_zero_or_one() {
     check! {
         { $($a:ident)? },
         { $($a)? @@ },
         { a },
+    };
+}
+
+#[test]
+fn repeat_zero_or_one_fail() {
+    check_eq(
+        quote!($($a:ident)?@),
+        quote!($($a)?@@),
+        quote!(@),
+        quote!(@@),
+    );
+    check_eq(
+        quote!($($a:ident)?@),
+        quote!($($a)?@@),
+        quote!(a@),
+        quote!(a@@),
+    );
+    check_eq(
+        quote!($($a:ident)?@),
+        quote!($($a)?@@),
+        quote!(a a@),
+        quote!(a a@@),
+    );
+}
+
+#[test]
+fn repeat_and_token_first() {
+    check! {
+        { $($a:ident)* },
+        { $(@ $a)* @},
+        { a b },
     };
 }
 
@@ -233,6 +307,15 @@ fn group() {
         { ($a:ident) },
         { ($a) @@ },
         { (a) },
+    };
+}
+
+#[test]
+fn to_token() {
+    check! {
+        { $a:ident },
+        { $a @@ },
+        { a },
     };
 }
 

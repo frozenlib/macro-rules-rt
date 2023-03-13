@@ -211,6 +211,15 @@ pub(crate) enum MacroRepOp {
     ZeroOrOne(#[parse(peek)] Token![?]),
 }
 
+impl MacroRepOp {
+    pub fn is_one_or_more(self) -> bool {
+        matches!(self, Self::OneOrMore(_))
+    }
+    pub fn is_zero_or_one(self) -> bool {
+        matches!(self, Self::ZeroOrOne(_))
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct MacroTranscriberItems(Vec<MacroTranscriberItem>);
 
