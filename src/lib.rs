@@ -19,11 +19,11 @@ mod parser;
 mod syntax;
 
 #[derive(Debug)]
-pub struct Pattern(PatternItems);
+pub struct Matcher(PatternItems);
 
-impl Pattern {
-    pub fn new(ts: TokenStream) -> Result<Self> {
-        Ok(Self(parse2::<MacroMatches>(ts)?.to_pattern()?))
+impl Matcher {
+    pub fn from_token_stream(tokens: TokenStream) -> Result<Self> {
+        Ok(Self(parse2::<MacroMatches>(tokens)?.to_pattern()?))
     }
 
     fn try_match(&self, input: ParseStream) -> Result<Match> {
@@ -317,6 +317,15 @@ fn insert_bind(
 }
 
 #[derive(Debug)]
+pub struct Transcriber(MacroTranscriberItems);
+
+impl Transcriber {
+    pub fn from_token_stream(tokens: TokenStream) -> Result<Self> {
+        Ok(Self(parse2::<MacroTranscriberItems>(tokens)?))
+    }
+}
+
+#[derive(Debug)]
 struct TranscriberItems {
     items: Vec<TranscriberItem>,
 }
@@ -470,19 +479,15 @@ impl TranscriberRep {
 }
 
 pub struct Rule {
-    pattern: Pattern,
-    transcriber: TranscriberItems,
+    from: Matcher,
+    to: TranscriberItems,
 }
 
 impl Rule {
-    pub fn new(pattern: Pattern, replcement: TokenStream) -> Result<Self> {
-        let mut transcriber =
-            parse2::<MacroTranscriberItems>(replcement)?.to_transcriber(&pattern.0.binds)?;
-        transcriber.attach(&pattern.0)?;
-        Ok(Rule {
-            pattern,
-            transcriber,
-        })
+    pub fn new(from: Matcher, to: Transcriber) -> Result<Self> {
+        let mut to = to.0.to_transcriber(&from.0.binds)?;
+        to.attach(&from.0)?;
+        Ok(Rule { from, to })
     }
 
     pub fn replace_all(&self, input: TokenStream) -> TokenStream {
@@ -492,9 +497,9 @@ impl Rule {
         let mut ts = TokenStream::new();
         while !input.is_empty() {
             let fork = input.fork();
-            if let Ok(m) = self.pattern.try_match(&fork) {
+            if let Ok(m) = self.from.try_match(&fork) {
                 if m.is_exists {
-                    self.transcriber.apply(&m, &mut ts);
+                    self.to.apply(&m, &mut ts);
                     input.advance_to(&fork);
                     continue;
                 }
