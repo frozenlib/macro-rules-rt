@@ -15,6 +15,6 @@ description = "macro_rules available at runtime."
 
 [dependencies]
 syn = { version = "1.0.109", features = ["full", "extra-traits"] }
-quote = "1.0.23"
-proc-macro2 = { version = "1.0.51", features = ["span-locations"] }
+quote = "1.0.24"
+proc-macro2 = { version = "1.0.52", features = ["span-locations"] }
 structmeta = { git = "https://github.com/frozenlib/structmeta.git" }
