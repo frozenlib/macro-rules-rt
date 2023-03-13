@@ -18,10 +18,12 @@ mod syn_utils;
 mod parser;
 mod syntax;
 
+/// Search pattern corresponding to `MacroMatch*` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
 #[derive(Debug)]
 pub struct Matcher(PatternItems);
 
 impl Matcher {
+    /// Create a new `Matcher` from a `TokenStream`.
     pub fn from_token_stream(tokens: TokenStream) -> Result<Self> {
         Ok(Self(parse2::<MacroMatches>(tokens)?.to_pattern()?))
     }
@@ -316,10 +318,15 @@ fn insert_bind(
     Ok(())
 }
 
+/// Replacement pattern corresponding to `MacroTranscriber` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
 #[derive(Debug)]
 pub struct Transcriber(MacroTranscriberItems);
 
 impl Transcriber {
+    /// Creates a new `Transcriber` from a `TokenStream`.
+    ///
+    /// The pattern corresponds to `MacroTranscriber` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html),
+    /// but does not include the outermost brace.
     pub fn from_token_stream(tokens: TokenStream) -> Result<Self> {
         Ok(Self(parse2::<MacroTranscriberItems>(tokens)?))
     }
@@ -478,6 +485,7 @@ impl TranscriberRep {
     }
 }
 
+/// Pair [`Matcher`] and [`Transcriber`].
 pub struct Rule {
     from: Matcher,
     to: TranscriberItems,
@@ -490,6 +498,7 @@ impl Rule {
         Ok(Rule { from, to })
     }
 
+    /// Replaces all non-overlapping matches in `input` with the provided transcriber.
     pub fn replace_all(&self, input: TokenStream) -> TokenStream {
         Parser::parse2(|input: ParseStream| Ok(self.replace_raw(input)), input).unwrap()
     }
