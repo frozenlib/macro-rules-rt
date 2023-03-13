@@ -1,4 +1,4 @@
-use macro_rules_emulator::Pattern;
+use macro_rules_rt::Pattern;
 use proc_macro2::TokenStream;
 use quote::quote;
 

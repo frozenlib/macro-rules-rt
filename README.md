@@ -1,15 +1,15 @@
-# macro-rules-emulator
+# macro-rules-rt
 
-[![Crates.io](https://img.shields.io/crates/v/macro-rules-emulator.svg)](https://crates.io/crates/macro-rules-emulator)
-[![Docs.rs](https://docs.rs/macro-rules-emulator/badge.svg)](https://docs.rs/macro-rules-emulator/)
-[![Actions Status](https://github.com/frozenlib/macro-rules-emulator/workflows/CI/badge.svg)](https://github.com/frozenlib/macro-rules-emulator/actions)
+[![Crates.io](https://img.shields.io/crates/v/macro-rules-rt.svg)](https://crates.io/crates/macro-rules-rt)
+[![Docs.rs](https://docs.rs/macro-rules-rt/badge.svg)](https://docs.rs/macro-rules-rt/)
+[![Actions Status](https://github.com/frozenlib/macro-rules-rt/workflows/CI/badge.svg)](https://github.com/frozenlib/macro-rules-rt/actions)
 
-`macro-rules-emulator` is an emulator of Rust's `macro_rules` and can be used to convert `TokenStream`.
+`macro-rules-rt` is a crate that transforms Rust source code using the syntax used in `macro-rules`.
 
 ## Example
 
 ```rust
-use macro_rules_emulator::{Pattern, Rule};
+use macro_rules_rt::{Pattern, Rule};
 use quote::quote;
 
 let from = Pattern::new(quote!($e:literal))?;

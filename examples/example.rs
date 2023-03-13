@@ -1,5 +1,5 @@
 fn main() -> syn::Result<()> {
-    use macro_rules_emulator::{Pattern, Rule};
+    use macro_rules_rt::{Pattern, Rule};
     use quote::quote;
 
     let from = Pattern::new(quote!($e:literal))?;
