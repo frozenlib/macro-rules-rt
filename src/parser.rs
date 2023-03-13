@@ -94,9 +94,7 @@ impl MacroMatcher {
         if content.contains_bind_or_rep() {
             Ok(PatternItem::Group(GroupPattern { delimiter, content }))
         } else {
-            Ok(PatternItem::Token(
-                self.content.to_token_stream().to_string(),
-            ))
+            Ok(PatternItem::Token(self.to_token_stream().to_string()))
         }
     }
 }

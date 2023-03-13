@@ -311,6 +311,33 @@ fn group() {
 }
 
 #[test]
+fn empty_group() {
+    check! {
+        { () @ },
+        { @@ },
+        { () @ },
+    };
+}
+
+#[test]
+fn non_empty_group() {
+    check! {
+        { (a) @ },
+        { @@ },
+        { (a) @ },
+    };
+}
+
+#[test]
+fn repeat_empty_group() {
+    check! {
+        { $(())* @ },
+        { @@ },
+        { ()() @ },
+    };
+}
+
+#[test]
 fn to_token() {
     check! {
         { $a:ident },

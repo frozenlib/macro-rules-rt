@@ -185,7 +185,9 @@ impl GroupPattern {
             }
             Delimiter::None => bail!(input.span(), "unsupported delimiter: None"),
         }
-        self.content.try_match_to(&content, m)
+        self.content.try_match_to(&content, m)?;
+        m.is_exists = true;
+        Ok(())
     }
 }
 
