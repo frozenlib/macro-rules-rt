@@ -512,6 +512,7 @@ impl Rule {
         }
         ts
     }
+    /// If the entire `input` matches the entire `from`, do the conversion. Otherwise, return an error.
     pub fn apply(&self, input: TokenStream) -> Result<TokenStream> {
         Parser::parse2(|input: ParseStream| self.apply_parser(input), input)
     }
