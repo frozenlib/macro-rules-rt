@@ -235,31 +235,6 @@
     },
     {
       "type": "shell",
-      "label": "proptest",
-      "command": "cargo",
-      "args": [
-        "test",
-        "--release",
-        "--test",
-        "proptest",
-        "--",
-        "--ignored"
-      ],
-      "problemMatcher": [
-        "$rustc"
-      ],
-      "presentation": {
-        "panel": "dedicated",
-        "clear": true
-      },
-      "options": {
-        "env": {
-          "TRYBUILD": "overwrite"
-        }
-      }
-    },
-    {
-      "type": "shell",
       "label": "include doc",
       "command": "include-doc",
       "args": [

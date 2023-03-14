@@ -494,9 +494,9 @@ impl Rule {
 
     /// Replaces all non-overlapping matches in `input` with the provided transcriber.
     pub fn replace_all(&self, input: TokenStream) -> TokenStream {
-        Parser::parse2(|input: ParseStream| Ok(self.replace_raw(input)), input).unwrap()
+        Parser::parse2(|input: ParseStream| Ok(self.replace_parser(input)), input).unwrap()
     }
-    fn replace_raw(&self, input: ParseStream) -> TokenStream {
+    fn replace_parser(&self, input: ParseStream) -> TokenStream {
         let mut ts = TokenStream::new();
         while !input.is_empty() {
             let fork = input.fork();
@@ -511,6 +511,15 @@ impl Rule {
             ts.extend(token.to_token_stream());
         }
         ts
+    }
+    pub fn apply(&self, input: TokenStream) -> Result<TokenStream> {
+        Parser::parse2(|input: ParseStream| self.apply_parser(input), input)
+    }
+    fn apply_parser(&self, input: ParseStream) -> Result<TokenStream> {
+        let mut ts = TokenStream::new();
+        let m = self.from.try_match(input)?;
+        self.to.apply(&m, &mut ts);
+        Ok(ts)
     }
 }
 

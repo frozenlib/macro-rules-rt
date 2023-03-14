@@ -18,3 +18,8 @@ syn = { version = "1.0.109", features = ["full", "extra-traits"] }
 quote = "1.0.24"
 proc-macro2 = { version = "1.0.52", features = ["span-locations"] }
 structmeta = { git = "https://github.com/frozenlib/structmeta.git" }
+
+[dev-dependencies]
+proptest = "1.1.0"
+test-strategy = "0.3.0"
+anyhow = "1.0.69"
