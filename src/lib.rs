@@ -382,7 +382,7 @@ impl TranscriberItem {
 
     fn apply(&self, m: &RawMatch, ts: &mut TokenStream) {
         match self {
-            TranscriberItem::Token(t) => ts.extend(t.to_token_stream()),
+            TranscriberItem::Token(t) => t.to_tokens(ts),
             TranscriberItem::Group(g) => g.apply(m, ts),
             TranscriberItem::Bind(b) => b.apply(m, ts),
             TranscriberItem::Rep(r) => r.apply(m, ts),
@@ -473,7 +473,7 @@ impl TranscriberRep {
         for m in &m.reps[self.rep_index].0 {
             if is_next {
                 if let Some(sep) = &self.sep {
-                    ts.extend(sep.to_token_stream());
+                    sep.to_tokens(ts);
                 }
             }
             is_next = true;
@@ -729,7 +729,7 @@ fn tokens_from_start_end<'a>(
     while cursor != end {
         last = Some(cursor);
         let token = cursor.token_tree().unwrap();
-        ts.extend(token.0.to_token_stream());
+        token.0.to_tokens(&mut ts);
         cursor = token.1;
     }
     (ts, last)

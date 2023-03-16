@@ -293,11 +293,11 @@ fn expand_none_group(tree: TokenTree) -> TokenStream {
 }
 
 fn unraw_tokens(tokens: TokenStream) -> TokenStream {
-    let mut stream = TokenStream::new();
+    let mut ts = TokenStream::new();
     for tree in tokens {
-        stream.extend(unraw_tree(tree).to_token_stream());
+        unraw_tree(tree).to_tokens(&mut ts);
     }
-    stream
+    ts
 }
 
 fn unraw_tree(tree: TokenTree) -> TokenTree {
