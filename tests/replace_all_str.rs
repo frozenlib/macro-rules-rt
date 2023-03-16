@@ -37,3 +37,8 @@ fn cr() {
 fn cr_lf() {
     check(quote!(+), quote!(-), "1\r\n+2+\r\n3", "1\r\n-2-\r\n3");
 }
+
+#[test]
+fn non_ascii() {
+    check(quote!(+), quote!(-), "\"あ\"+2+3", "\"あ\"-2-3");
+}
