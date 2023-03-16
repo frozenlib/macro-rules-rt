@@ -2,22 +2,25 @@ use crate::parser::{MacroFlagSpec, MacroMatches, MacroRepOp};
 use parser::MacroTranscriberItems;
 use proc_macro2::{Delimiter, Ident, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 use structmeta::Parse;
 use syn::{
     braced, bracketed,
+    buffer::Cursor,
     ext::IdentExt,
     parenthesized,
     parse::{discouraged::Speculative, Parse, ParseStream, Parser},
     Block, Expr, Item, Lifetime, Lit, Meta, Pat, Path, Result, Type, Visibility,
 };
 use syntax::{parse_macro_pat, parse_macro_stmt};
+use text::Text;
 
 #[macro_use]
 mod syn_utils;
 
 mod parser;
 mod syntax;
+mod text;
 
 /// Search pattern corresponding to `MacroMatch*` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
 #[derive(Debug)]
@@ -30,7 +33,7 @@ impl Parse for Matcher {
 }
 
 impl Matcher {
-    fn try_match(&self, input: ParseStream) -> Result<Match> {
+    fn try_match(&self, input: ParseStream) -> Result<RawMatch> {
         self.0.try_match(input)
     }
 }
@@ -91,12 +94,12 @@ impl PatternItems {
         }
         None
     }
-    fn try_match(&self, input: ParseStream) -> Result<Match> {
-        let mut m = Match::new();
+    fn try_match(&self, input: ParseStream) -> Result<RawMatch> {
+        let mut m = RawMatch::new();
         self.try_match_to(input, &mut m)?;
         Ok(m)
     }
-    fn try_match_to(&self, input: ParseStream, m: &mut Match) -> Result<()> {
+    fn try_match_to(&self, input: ParseStream, m: &mut RawMatch) -> Result<()> {
         for item in &self.items {
             item.try_match(input, m)?;
         }
@@ -121,7 +124,7 @@ impl PatternItem {
         }
     }
 
-    fn try_match(&self, input: ParseStream, m: &mut Match) -> Result<()> {
+    fn try_match(&self, input: ParseStream, m: &mut RawMatch) -> Result<()> {
         match self {
             PatternItem::Token(token) => {
                 try_match_token(input, token)?;
@@ -175,7 +178,7 @@ impl GroupPattern {
         Ok(())
     }
 
-    fn try_match_to(&self, input: ParseStream, m: &mut Match) -> Result<()> {
+    fn try_match_to(&self, input: ParseStream, m: &mut RawMatch) -> Result<()> {
         let content;
         match self.delimiter {
             Delimiter::Parenthesis => {
@@ -353,7 +356,7 @@ impl TranscriberItems {
         }
         Ok(())
     }
-    fn apply(&self, m: &Match, ts: &mut TokenStream) {
+    fn apply(&self, m: &RawMatch, ts: &mut TokenStream) {
         for item in &self.items {
             item.apply(m, ts);
         }
@@ -377,7 +380,7 @@ impl TranscriberItem {
         }
     }
 
-    fn apply(&self, m: &Match, ts: &mut TokenStream) {
+    fn apply(&self, m: &RawMatch, ts: &mut TokenStream) {
         match self {
             TranscriberItem::Token(t) => ts.extend(t.to_token_stream()),
             TranscriberItem::Group(g) => g.apply(m, ts),
@@ -397,7 +400,7 @@ impl TranscriberGroup {
         self.content.attach(p)
     }
 
-    fn apply(&self, m: &Match, ts: &mut TokenStream) {
+    fn apply(&self, m: &RawMatch, ts: &mut TokenStream) {
         let mut content = TokenStream::new();
         self.content.apply(m, &mut content);
         match self.delimiter {
@@ -430,7 +433,7 @@ impl TranscriberBind {
         }
     }
 
-    fn apply(&self, m: &Match, ts: &mut TokenStream) {
+    fn apply(&self, m: &RawMatch, ts: &mut TokenStream) {
         ts.extend(m.binds[self.bind_index].clone());
     }
 }
@@ -465,7 +468,7 @@ impl TranscriberRep {
         bail!(self.bind_span,"attempted to repeat an expression containing no syntax variables matched as repeating at this depth")
     }
 
-    fn apply(&self, m: &Match, ts: &mut TokenStream) {
+    fn apply(&self, m: &RawMatch, ts: &mut TokenStream) {
         let mut is_next = false;
         for m in &m.reps[self.rep_index].0 {
             if is_next {
@@ -491,26 +494,45 @@ impl Rule {
         to.attach(&from.0)?;
         Ok(Rule { from, to })
     }
-
-    /// Replaces all non-overlapping matches in `input` with the provided transcriber.
-    pub fn replace_all(&self, input: TokenStream) -> TokenStream {
-        Parser::parse2(|input: ParseStream| Ok(self.replace_parser(input)), input).unwrap()
+    pub fn find_all(&self, input: TokenStream) -> Matches {
+        self.find_all_raw(input, None)
     }
-    fn replace_parser(&self, input: ParseStream) -> TokenStream {
-        let mut ts = TokenStream::new();
+    pub fn find_all_str(&self, input: &str) -> std::result::Result<Matches, proc_macro2::LexError> {
+        let tokens = TokenStream::from_str(input)?;
+        Ok(self.find_all_raw(tokens, Some(Text::new(input.to_owned()))))
+    }
+    fn find_all_raw(&self, input: TokenStream, text: Option<Text>) -> Matches {
+        Parser::parse2(
+            |input: ParseStream| Ok(self.find_all_parser(input, text)),
+            input,
+        )
+        .unwrap()
+    }
+    fn find_all_parser(&self, input: ParseStream, text: Option<Text>) -> Matches {
+        let mut b = MatchesBuilder::new(text, input.cursor());
         while !input.is_empty() {
             let fork = input.fork();
             if let Ok(m) = self.from.try_match(&fork) {
                 if m.is_exists {
-                    self.to.apply(&m, &mut ts);
+                    let mut to_tokens = TokenStream::new();
+                    self.to.apply(&m, &mut to_tokens);
+                    b.push(input.cursor(), fork.cursor(), to_tokens);
                     input.advance_to(&fork);
                     continue;
                 }
             }
-            let token: TokenTree = input.parse().unwrap();
-            ts.extend(token.to_token_stream());
+            let _: TokenTree = input.parse().unwrap();
         }
-        ts
+        b.finish(input.cursor())
+    }
+
+    /// Replaces all non-overlapping matches in `input` with the provided transcriber.
+    pub fn replace_all(&self, input: TokenStream) -> TokenStream {
+        let mut tokens = TokenStream::new();
+        for (_, o) in &self.find_all(input) {
+            o.to_tokens(&mut tokens);
+        }
+        tokens
     }
     /// If the entire `input` matches the entire `from`, do the conversion. Otherwise, return an error.
     pub fn apply(&self, input: TokenStream) -> Result<TokenStream> {
@@ -524,18 +546,138 @@ impl Rule {
     }
 }
 
+pub struct UnformattedTokenStream {
+    tokens: TokenStream,
+    text: Option<String>,
+}
+impl ToTokens for UnformattedTokenStream {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.extend(self.tokens.clone())
+    }
+}
+impl std::fmt::Display for UnformattedTokenStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(text) = &self.text {
+            write!(f, "{text}")
+        } else {
+            write!(f, "{}", &self.tokens)
+        }
+    }
+}
+
+pub struct Match {
+    pub input: UnformattedTokenStream,
+    pub output: UnformattedTokenStream,
+}
+pub struct Matches {
+    items: Vec<Match>,
+    seps: Vec<UnformattedTokenStream>,
+}
+
+mod matches {
+    use super::*;
+    impl<'a> IntoIterator for &'a Matches {
+        type Item = (&'a UnformattedTokenStream, &'a UnformattedTokenStream);
+        type IntoIter = MatchesIter<'a>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            MatchesIter { ms: self, n: 0 }
+        }
+    }
+    pub struct MatchesIter<'a> {
+        ms: &'a Matches,
+        n: usize,
+    }
+    impl<'a> Iterator for MatchesIter<'a> {
+        type Item = (&'a UnformattedTokenStream, &'a UnformattedTokenStream);
+        fn next(&mut self) -> Option<Self::Item> {
+            let n = self.n;
+            if n <= self.ms.items.len() * 2 {
+                self.n += 1;
+                Some(if n % 2 == 0 {
+                    let item = &self.ms.seps[n / 2];
+                    (item, item)
+                } else {
+                    let item = &self.ms.items[n / 2];
+                    (&item.input, &item.output)
+                })
+            } else {
+                None
+            }
+        }
+    }
+}
+
+struct MatchesBuilder<'a> {
+    text: Option<Text>,
+    items: Vec<Match>,
+    seps: Vec<UnformattedTokenStream>,
+    text_start: usize,
+    tokens_start: Cursor<'a>,
+}
+impl<'a> MatchesBuilder<'a> {
+    fn new(text: Option<Text>, tokens_start: Cursor<'a>) -> Self {
+        Self {
+            text,
+            items: Vec::new(),
+            seps: Vec::new(),
+            text_start: 0,
+            tokens_start,
+        }
+    }
+    fn push(&mut self, start: Cursor<'a>, end: Cursor<'a>, to_tokens: TokenStream) {
+        self.push_sep(start);
+        let tokens = tokens_from_start_end(start, end);
+        self.tokens_start = end;
+        let text = self.read_text(end.span());
+        let from = UnformattedTokenStream { tokens, text };
+        let to = UnformattedTokenStream {
+            tokens: to_tokens,
+            text: None,
+        };
+        self.items.push(Match {
+            input: from,
+            output: to,
+        })
+    }
+    fn push_sep(&mut self, end: Cursor) {
+        let text = self.read_text(end.span());
+        let tokens = tokens_from_start_end(self.tokens_start, end);
+        self.seps.push(UnformattedTokenStream { tokens, text });
+    }
+    fn read_text(&mut self, next: Span) -> Option<String> {
+        let text = self.text.as_ref()?;
+        let end = next.start();
+        if end.line == 0 {
+            return None;
+        }
+        let start = self.text_start;
+        let end = text.offset_of(end);
+        self.text_start = end;
+        Some(text.get(start, end).to_owned())
+    }
+
+    fn finish(mut self, end: Cursor) -> Matches {
+        self.push_sep(end);
+        Matches {
+            items: self.items,
+            seps: self.seps,
+        }
+    }
+}
+
 #[derive(Default)]
-struct Match {
+struct RawMatch {
     binds: Vec<TokenStream>,
     reps: Vec<MatchRep>,
     is_exists: bool,
 }
-impl Match {
+impl RawMatch {
     fn new() -> Self {
         Self::default()
     }
 }
-struct MatchRep(Vec<Match>);
+struct MatchRep(Vec<RawMatch>);
 
 fn try_match_token(input: ParseStream, s: &str) -> Result<()> {
     let t = input.parse::<TokenTree>()?;
@@ -544,4 +686,14 @@ fn try_match_token(input: ParseStream, s: &str) -> Result<()> {
     } else {
         bail!(input.span(), "mismatch")
     }
+}
+fn tokens_from_start_end(start: Cursor, end: Cursor) -> TokenStream {
+    let mut ts = TokenStream::new();
+    let mut cursor = start;
+    while cursor != end {
+        let token = cursor.token_tree().unwrap();
+        ts.extend(token.0.to_token_stream());
+        cursor = token.1;
+    }
+    ts
 }
