@@ -1,6 +1,6 @@
 use crate::parser::{MacroFlagSpec, MacroMatches, MacroRepOp};
 use parser::MacroTranscriberItems;
-use proc_macro2::{Delimiter, Ident, Span, TokenStream, TokenTree};
+use proc_macro2::{Delimiter, Ident, LineColumn, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 use std::{collections::HashMap, str::FromStr};
 use structmeta::Parse;
@@ -534,6 +534,19 @@ impl Rule {
         }
         tokens
     }
+    pub fn replace_all_str(
+        &self,
+        input: &str,
+    ) -> std::result::Result<String, proc_macro2::LexError> {
+        use std::fmt::Write;
+        let tokens = TokenStream::from_str(input)?;
+        let mut s = String::new();
+        for (_, o) in &self.find_all_raw(tokens, Some(Text::new(input.to_owned()))) {
+            write!(&mut s, "{o}").unwrap();
+        }
+        Ok(s)
+    }
+
     /// If the entire `input` matches the entire `from`, do the conversion. Otherwise, return an error.
     pub fn apply(&self, input: TokenStream) -> Result<TokenStream> {
         Parser::parse2(|input: ParseStream| self.apply_parser(input), input)
@@ -625,39 +638,53 @@ impl<'a> MatchesBuilder<'a> {
             tokens_start,
         }
     }
-    fn push(&mut self, start: Cursor<'a>, end: Cursor<'a>, to_tokens: TokenStream) {
+    fn push(&mut self, start: Cursor<'a>, end: Cursor<'a>, output_tokens: TokenStream) {
         self.push_sep(start);
-        let tokens = tokens_from_start_end(start, end);
-        self.tokens_start = end;
-        let text = self.read_text(end.span());
-        let from = UnformattedTokenStream { tokens, text };
-        let to = UnformattedTokenStream {
-            tokens: to_tokens,
+        let input = self.read_unformatted(end, false);
+        let output = UnformattedTokenStream {
+            tokens: output_tokens,
             text: None,
         };
-        self.items.push(Match {
-            input: from,
-            output: to,
-        })
+        self.items.push(Match { input, output })
     }
-    fn push_sep(&mut self, end: Cursor) {
-        let text = self.read_text(end.span());
-        let tokens = tokens_from_start_end(self.tokens_start, end);
-        self.seps.push(UnformattedTokenStream { tokens, text });
+    fn push_sep(&mut self, end: Cursor<'a>) {
+        let sep = self.read_unformatted(end, true);
+        self.seps.push(sep);
     }
-    fn read_text(&mut self, next: Span) -> Option<String> {
+    fn read_unformatted(
+        &mut self,
+        end: Cursor<'a>,
+        include_last_space: bool,
+    ) -> UnformattedTokenStream {
+        let (tokens, last) = tokens_from_start_end(self.tokens_start, end);
+        let line_column = match (last, include_last_space, end.eof()) {
+            (_, _, true) => None,
+            (Some(last), false, false) => Some(last.span().end()),
+            (_, _, false) => Some(end.span().start()),
+        };
+        let text = self.read_text(line_column);
+        self.tokens_start = end;
+        UnformattedTokenStream { tokens, text }
+    }
+    fn read_text(&mut self, line_column: Option<LineColumn>) -> Option<String> {
         let text = self.text.as_ref()?;
-        let end = next.start();
-        if end.line == 0 {
-            return None;
+        if let Some(line_column) = line_column {
+            if line_column.line == 0 {
+                return None;
+            }
+            let start = self.text_start;
+            let end = text.offset_of(line_column);
+            self.text_start = end;
+            Some(text.get(start, end).to_owned())
+        } else {
+            let start = self.text_start;
+            let end = text.end();
+            self.text_start = end;
+            Some(text.get(start, end).to_owned())
         }
-        let start = self.text_start;
-        let end = text.offset_of(end);
-        self.text_start = end;
-        Some(text.get(start, end).to_owned())
     }
 
-    fn finish(mut self, end: Cursor) -> Matches {
+    fn finish(mut self, end: Cursor<'a>) -> Matches {
         self.push_sep(end);
         Matches {
             items: self.items,
@@ -687,13 +714,18 @@ fn try_match_token(input: ParseStream, s: &str) -> Result<()> {
         bail!(input.span(), "mismatch")
     }
 }
-fn tokens_from_start_end(start: Cursor, end: Cursor) -> TokenStream {
+fn tokens_from_start_end<'a>(
+    start: Cursor<'a>,
+    end: Cursor<'a>,
+) -> (TokenStream, Option<Cursor<'a>>) {
     let mut ts = TokenStream::new();
     let mut cursor = start;
+    let mut last = None;
     while cursor != end {
+        last = Some(cursor);
         let token = cursor.token_tree().unwrap();
         ts.extend(token.0.to_token_stream());
         cursor = token.1;
     }
-    ts
+    (ts, last)
 }

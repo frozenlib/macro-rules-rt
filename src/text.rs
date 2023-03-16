@@ -13,7 +13,10 @@ impl Text {
         &self.str[start..end]
     }
     pub fn offset_of(&self, line_column: LineColumn) -> usize {
-        self.line_offsets.0[line_column.line - 1] + line_column.column - 1
+        self.line_offsets.0[line_column.line - 1] + line_column.column
+    }
+    pub fn end(&self) -> usize {
+        self.str.len()
     }
 }
 
