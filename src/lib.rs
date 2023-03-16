@@ -534,6 +534,11 @@ impl Rule {
         }
         tokens
     }
+
+    /// Replaces all non-overlapping matches in input with the provided transcriber.
+    ///
+    /// Unlike creating `TokenStream` from `str` and then calling [`Rule::replace_all`],
+    /// the original string is preserved for the parts that are not replaced.
     pub fn replace_all_str(
         &self,
         input: &str,
