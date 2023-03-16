@@ -12,7 +12,7 @@ fn check(from: TokenStream, to: TokenStream, input: &str, expect: &str) {
 }
 
 #[test]
-fn simple() {
+fn single_line() {
     check(quote!(+), quote!(-), "1+2+3", "1-2-3");
     check(quote!(+), quote!(-), "+2+3", "-2-3");
     check(
@@ -21,4 +21,19 @@ fn simple() {
         "1+2 a b c 3+4",
         "1+2 a @ b @ c @ 3+4",
     );
+}
+
+#[test]
+fn lf() {
+    check(quote!(+), quote!(-), "1\n+2+\n3", "1\n-2-\n3");
+}
+
+#[test]
+fn cr() {
+    check(quote!(+), quote!(-), "1\r+2+\r3", "1\r-2-\r3");
+}
+
+#[test]
+fn cr_lf() {
+    check(quote!(+), quote!(-), "1\r\n+2+\r\n3", "1\r\n-2-\r\n3");
 }
