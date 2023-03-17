@@ -503,9 +503,8 @@ impl Rule {
     pub fn find_all(&self, input: TokenStream) -> Matches {
         self.find_all_raw(input, None)
     }
-    pub fn find_all_str(&self, input: &str) -> std::result::Result<Matches, proc_macro2::LexError> {
-        let tokens = TokenStream::from_str(input)?;
-        Ok(self.find_all_raw(tokens, Some(Text::new(input.to_owned()))))
+    pub fn find_all_str(&self, input: &str) -> Result<Matches> {
+        Ok(self.find_all_raw(parse_str(input)?, Some(Text::new(input.to_owned()))))
     }
     fn find_all_raw(&self, input: TokenStream, text: Option<Text>) -> Matches {
         Parser::parse2(
@@ -545,14 +544,10 @@ impl Rule {
     ///
     /// Unlike creating `TokenStream` from `str` and then calling [`Rule::replace_all`],
     /// the original string is preserved for the parts that are not replaced.
-    pub fn replace_all_str(
-        &self,
-        input: &str,
-    ) -> std::result::Result<String, proc_macro2::LexError> {
+    pub fn replace_all_str(&self, input: &str) -> Result<String> {
         use std::fmt::Write;
-        let tokens = TokenStream::from_str(input)?;
         let mut s = String::new();
-        for (_, o) in &self.find_all_raw(tokens, Some(Text::new(input.to_owned()))) {
+        for (_, o) in &self.find_all_raw(parse_str(input)?, Some(Text::new(input.to_owned()))) {
             write!(&mut s, "{o}").unwrap();
         }
         Ok(s)
