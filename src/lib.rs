@@ -542,7 +542,7 @@ impl Rule {
     /// Replaces all non-overlapping matches in `input` with the provided transcriber.
     pub fn replace_all(&self, input: TokenStream) -> TokenStream {
         let mut tokens = TokenStream::new();
-        for (_, o) in self.find_all(input).split() {
+        for (_, o) in self.find_all(input).parts() {
             o.to_tokens(&mut tokens);
         }
         tokens
@@ -557,7 +557,7 @@ impl Rule {
         let mut s = String::new();
         let text = Some(Text::new(input.to_owned()));
         let input = parse_str(input)?;
-        for (_, o) in self.find_all_raw(input, text).split() {
+        for (_, o) in self.find_all_raw(input, text).parts() {
             write!(&mut s, "{o}").unwrap();
         }
         Ok(s)
@@ -614,7 +614,7 @@ pub struct FindAll {
 }
 
 impl FindAll {
-    pub fn split(
+    pub fn parts(
         &self,
     ) -> impl Iterator<Item = (&UnformattedTokenStream, &UnformattedTokenStream)> {
         pub struct Split<'a> {
