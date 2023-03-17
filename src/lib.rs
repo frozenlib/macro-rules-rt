@@ -335,6 +335,14 @@ fn insert_bind(
 #[derive(Debug, Parse)]
 pub struct Transcriber(MacroTranscriberItems);
 
+impl FromStr for Transcriber {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        parse_str(s)
+    }
+}
+
 #[derive(Debug)]
 struct TranscriberItems {
     items: Vec<TranscriberItem>,
