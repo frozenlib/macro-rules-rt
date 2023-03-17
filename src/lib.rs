@@ -10,7 +10,7 @@ use syn::{
     ext::IdentExt,
     parenthesized,
     parse::{discouraged::Speculative, Parse, ParseStream, Parser},
-    Block, Expr, Item, Lifetime, Lit, Meta, Pat, Path, Result, Type, Visibility,
+    parse_str, Block, Error, Expr, Item, Lifetime, Lit, Meta, Pat, Path, Result, Type, Visibility,
 };
 use syntax::{parse_macro_pat, parse_macro_stmt};
 use text::Text;
@@ -29,6 +29,12 @@ pub struct Matcher(PatternItems);
 impl Parse for Matcher {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Self(input.parse::<MacroMatches>()?.to_pattern()?))
+    }
+}
+impl FromStr for Matcher {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self> {
+        parse_str(s)
     }
 }
 
