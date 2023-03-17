@@ -573,10 +573,13 @@ impl Rule {
     }
 }
 
+/// [`TokenStream`] with original (pre-formatting) string.
+#[derive(Clone)]
 pub struct UnformattedTokenStream {
     tokens: TokenStream,
     text: Option<String>,
 }
+
 impl ToTokens for UnformattedTokenStream {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.extend(self.tokens.clone())
@@ -589,6 +592,11 @@ impl std::fmt::Display for UnformattedTokenStream {
         } else {
             write!(f, "{}", &self.tokens)
         }
+    }
+}
+impl std::fmt::Debug for UnformattedTokenStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
     }
 }
 
