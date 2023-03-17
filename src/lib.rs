@@ -542,8 +542,8 @@ impl Rule {
     /// Replaces all non-overlapping matches in `input` with the provided transcriber.
     pub fn replace_all(&self, input: TokenStream) -> TokenStream {
         let mut tokens = TokenStream::new();
-        for (_, o) in self.find_all(input).parts() {
-            o.to_tokens(&mut tokens);
+        for p in self.find_all(input).parts() {
+            p.output.to_tokens(&mut tokens);
         }
         tokens
     }
@@ -557,8 +557,8 @@ impl Rule {
         let mut s = String::new();
         let text = Some(Text::new(input.to_owned()));
         let input = parse_str(input)?;
-        for (_, o) in self.find_all_raw(input, text).parts() {
-            write!(&mut s, "{o}").unwrap();
+        for p in self.find_all_raw(input, text).parts() {
+            write!(&mut s, "{}", &p.output).unwrap();
         }
         Ok(s)
     }
@@ -607,6 +607,13 @@ struct Match {
     output: UnformattedTokenStream,
 }
 
+/// A subsequence of [`UnformattedTokenStream`]
+pub struct Part<'a> {
+    pub input: &'a UnformattedTokenStream,
+    pub output: &'a UnformattedTokenStream,
+    pub is_match: bool,
+}
+
 /// Result of [`Rule::find_all`].
 pub struct FindAll {
     items_match: Vec<Match>,
@@ -614,32 +621,36 @@ pub struct FindAll {
 }
 
 impl FindAll {
-    pub fn parts(
-        &self,
-    ) -> impl Iterator<Item = (&UnformattedTokenStream, &UnformattedTokenStream)> {
-        pub struct Split<'a> {
+    pub fn parts(&self) -> impl Iterator<Item = Part> {
+        pub struct Parts<'a> {
             this: &'a FindAll,
             n: usize,
         }
-        impl<'a> Iterator for Split<'a> {
-            type Item = (&'a UnformattedTokenStream, &'a UnformattedTokenStream);
+        impl<'a> Iterator for Parts<'a> {
+            type Item = Part<'a>;
             fn next(&mut self) -> Option<Self::Item> {
                 let n = self.n;
                 if n <= self.this.items_match.len() * 2 {
                     self.n += 1;
-                    Some(if n % 2 == 0 {
-                        let item = &self.this.items_unmatch[n / 2];
-                        (item, item)
-                    } else {
+                    let is_match = n % 2 != 0;
+                    let (input, output) = if is_match {
                         let item = &self.this.items_match[n / 2];
                         (&item.input, &item.output)
+                    } else {
+                        let item = &self.this.items_unmatch[n / 2];
+                        (item, item)
+                    };
+                    Some(Part {
+                        input,
+                        output,
+                        is_match,
                     })
                 } else {
                     None
                 }
             }
         }
-        Split { this: self, n: 0 }
+        Parts { this: self, n: 0 }
     }
 }
 
