@@ -508,21 +508,21 @@ impl Rule {
         to.attach(&from.0)?;
         Ok(Rule { from, to })
     }
-    pub fn find_all(&self, input: TokenStream) -> Matches {
+    pub fn find_all(&self, input: TokenStream) -> FindAll {
         self.find_all_raw(input, None)
     }
-    pub fn find_all_str(&self, input: &str) -> Result<Matches> {
+    pub fn find_all_str(&self, input: &str) -> Result<FindAll> {
         Ok(self.find_all_raw(parse_str(input)?, Some(Text::new(input.to_owned()))))
     }
-    fn find_all_raw(&self, input: TokenStream, text: Option<Text>) -> Matches {
+    fn find_all_raw(&self, input: TokenStream, text: Option<Text>) -> FindAll {
         Parser::parse2(
             |input: ParseStream| Ok(self.find_all_parser(input, text)),
             input,
         )
         .unwrap()
     }
-    fn find_all_parser(&self, input: ParseStream, text: Option<Text>) -> Matches {
-        let mut b = MatchesBuilder::new(text, input.cursor());
+    fn find_all_parser(&self, input: ParseStream, text: Option<Text>) -> FindAll {
+        let mut b = FindAllBuilder::new(text, input.cursor());
         while !input.is_empty() {
             let fork = input.fork();
             if let Ok(m) = self.from.try_match(&fork) {
@@ -542,7 +542,7 @@ impl Rule {
     /// Replaces all non-overlapping matches in `input` with the provided transcriber.
     pub fn replace_all(&self, input: TokenStream) -> TokenStream {
         let mut tokens = TokenStream::new();
-        for (_, o) in &self.find_all(input) {
+        for (_, o) in self.find_all(input).split() {
             o.to_tokens(&mut tokens);
         }
         tokens
@@ -555,7 +555,9 @@ impl Rule {
     pub fn replace_all_str(&self, input: &str) -> Result<String> {
         use std::fmt::Write;
         let mut s = String::new();
-        for (_, o) in &self.find_all_raw(parse_str(input)?, Some(Text::new(input.to_owned()))) {
+        let text = Some(Text::new(input.to_owned()));
+        let input = parse_str(input)?;
+        for (_, o) in self.find_all_raw(input, text).split() {
             write!(&mut s, "{o}").unwrap();
         }
         Ok(s)
@@ -600,78 +602,76 @@ impl std::fmt::Debug for UnformattedTokenStream {
     }
 }
 
-pub struct Match {
-    pub input: UnformattedTokenStream,
-    pub output: UnformattedTokenStream,
-}
-pub struct Matches {
-    items: Vec<Match>,
-    seps: Vec<UnformattedTokenStream>,
+struct Match {
+    input: UnformattedTokenStream,
+    output: UnformattedTokenStream,
 }
 
-mod matches {
-    use super::*;
-    impl<'a> IntoIterator for &'a Matches {
-        type Item = (&'a UnformattedTokenStream, &'a UnformattedTokenStream);
-        type IntoIter = MatchesIter<'a>;
+/// Result of [`Rule::find_all`].
+pub struct FindAll {
+    items_match: Vec<Match>,
+    items_unmatch: Vec<UnformattedTokenStream>,
+}
 
-        fn into_iter(self) -> Self::IntoIter {
-            MatchesIter { ms: self, n: 0 }
+impl FindAll {
+    pub fn split(
+        &self,
+    ) -> impl Iterator<Item = (&UnformattedTokenStream, &UnformattedTokenStream)> {
+        pub struct Split<'a> {
+            this: &'a FindAll,
+            n: usize,
         }
-    }
-    pub struct MatchesIter<'a> {
-        ms: &'a Matches,
-        n: usize,
-    }
-    impl<'a> Iterator for MatchesIter<'a> {
-        type Item = (&'a UnformattedTokenStream, &'a UnformattedTokenStream);
-        fn next(&mut self) -> Option<Self::Item> {
-            let n = self.n;
-            if n <= self.ms.items.len() * 2 {
-                self.n += 1;
-                Some(if n % 2 == 0 {
-                    let item = &self.ms.seps[n / 2];
-                    (item, item)
+        impl<'a> Iterator for Split<'a> {
+            type Item = (&'a UnformattedTokenStream, &'a UnformattedTokenStream);
+            fn next(&mut self) -> Option<Self::Item> {
+                let n = self.n;
+                if n <= self.this.items_match.len() * 2 {
+                    self.n += 1;
+                    Some(if n % 2 == 0 {
+                        let item = &self.this.items_unmatch[n / 2];
+                        (item, item)
+                    } else {
+                        let item = &self.this.items_match[n / 2];
+                        (&item.input, &item.output)
+                    })
                 } else {
-                    let item = &self.ms.items[n / 2];
-                    (&item.input, &item.output)
-                })
-            } else {
-                None
+                    None
+                }
             }
         }
+        Split { this: self, n: 0 }
     }
 }
 
-struct MatchesBuilder<'a> {
+struct FindAllBuilder<'a> {
     text: Option<Text>,
-    items: Vec<Match>,
-    seps: Vec<UnformattedTokenStream>,
+    items_match: Vec<Match>,
+    items_unmatch: Vec<UnformattedTokenStream>,
     text_start: usize,
     tokens_start: Cursor<'a>,
 }
-impl<'a> MatchesBuilder<'a> {
+impl<'a> FindAllBuilder<'a> {
     fn new(text: Option<Text>, tokens_start: Cursor<'a>) -> Self {
         Self {
             text,
-            items: Vec::new(),
-            seps: Vec::new(),
+            items_match: Vec::new(),
+            items_unmatch: Vec::new(),
             text_start: 0,
             tokens_start,
         }
     }
     fn push(&mut self, start: Cursor<'a>, end: Cursor<'a>, output_tokens: TokenStream) {
-        self.push_sep(start);
+        self.push_unmatch(start);
         let input = self.read_unformatted(end, false);
         let output = UnformattedTokenStream {
             tokens: output_tokens,
             text: None,
         };
-        self.items.push(Match { input, output })
+        self.items_match.push(Match { input, output })
     }
-    fn push_sep(&mut self, end: Cursor<'a>) {
+    fn push_unmatch(&mut self, end: Cursor<'a>) {
         let sep = self.read_unformatted(end, true);
-        self.seps.push(sep);
+        self.items_unmatch.push(sep);
     }
     fn read_unformatted(
         &mut self,
@@ -706,11 +706,11 @@ impl<'a> MatchesBuilder<'a> {
         }
     }
 
-    fn finish(mut self, end: Cursor<'a>) -> Matches {
-        self.push_sep(end);
-        Matches {
-            items: self.items,
-            seps: self.seps,
+    fn finish(mut self, end: Cursor<'a>) -> FindAll {
+        self.push_unmatch(end);
+        FindAll {
+            items_match: self.items_match,
+            items_unmatch: self.items_unmatch,
         }
     }
 }
