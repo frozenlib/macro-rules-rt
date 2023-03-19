@@ -12,7 +12,7 @@ use syn::{
     parse::{discouraged::Speculative, Parse, ParseStream, Parser},
     parse_str, Block, Error, Expr, Item, Lifetime, Lit, Meta, Pat, Path, Result, Type, Visibility,
 };
-use syntax::{parse_macro_pat, parse_macro_stmt};
+use syntax::parse_macro_stmt;
 use text::Text;
 
 #[macro_use]
@@ -240,8 +240,8 @@ impl BindPattern {
             MacroFlagSpec::Lifetime(_) => input.parse::<Lifetime>()?.to_token_stream(),
             MacroFlagSpec::Literal(_) => input.parse::<Lit>()?.to_token_stream(),
             MacroFlagSpec::Meta(_) => input.parse::<Meta>()?.to_token_stream(),
-            MacroFlagSpec::Pat(_) => parse_macro_pat(input)?.to_token_stream(),
-            MacroFlagSpec::PatParam(_) => input.parse::<Pat>()?.to_token_stream(),
+            MacroFlagSpec::Pat(_) => Pat::parse_multi_with_leading_vert(input)?.to_token_stream(),
+            MacroFlagSpec::PatParam(_) => Pat::parse_single(input)?.to_token_stream(),
             MacroFlagSpec::Path(_) => input.parse::<Path>()?.to_token_stream(),
             MacroFlagSpec::Stmt(_) => parse_macro_stmt(input)?.to_token_stream(),
             MacroFlagSpec::Tt(_) => input.parse::<TokenTree>()?.to_token_stream(),
