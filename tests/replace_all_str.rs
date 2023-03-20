@@ -42,3 +42,23 @@ fn cr_lf() {
 fn non_ascii() {
     check(quote!(+), quote!(-), "\"あ\"+2+3", "\"あ\"-2-3");
 }
+
+#[test]
+fn replace_middle() {
+    check(quote!(+), quote!(-), "1+2", "1-2");
+}
+
+#[test]
+fn replace_end() {
+    check(quote!(+), quote!(-), "1+", "1-");
+}
+
+#[test]
+fn tt() {
+    check(quote!($x:tt), quote!(a), "1 2", "a a");
+}
+
+#[test]
+fn doc_comment() {
+    check(quote!($x:tt), quote!(), "///\nstruct X;", "///");
+}
