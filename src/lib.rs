@@ -42,6 +42,9 @@ impl Matcher {
     fn try_match(&self, input: ParseStream) -> Result<RawMatch> {
         self.0.try_match(input)
     }
+    pub fn is_empty(&self) -> bool {
+        self.0.items.is_empty()
+    }
 }
 
 #[derive(Debug)]
