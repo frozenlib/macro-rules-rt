@@ -14,6 +14,7 @@ macro_rules! check { {
         check_eq(quote!($($from)*), quote!($($to)*), quote!($($input)*), mr! { $($input)* })
     };
 }
+#[track_caller]
 fn check_eq(from: TokenStream, to: TokenStream, input: TokenStream, expected: TokenStream) {
     let from_str = from.to_string();
     let to_str = to.to_string();

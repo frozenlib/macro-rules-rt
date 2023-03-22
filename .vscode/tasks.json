@@ -13,6 +13,10 @@
       "problemMatcher": [
         "$rustc"
       ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
       "presentation": {
         "panel": "dedicated",
         "clear": true
@@ -50,7 +54,7 @@
         "$rustc"
       ],
       "group": {
-        "kind": "build",
+        "kind": "test",
         "isDefault": true
       },
       "presentation": {

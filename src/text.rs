@@ -1,19 +1,17 @@
 use proc_macro2::LineColumn;
 
-pub(crate) struct Text {
-    str: String,
+#[derive(Debug)]
+pub struct Text<'a> {
+    pub str: &'a str,
     line_offsets: LineOffsets,
 }
-impl Text {
-    pub fn new(str: String) -> Self {
-        let line_offsets = LineOffsets::new(&str);
+impl<'a> Text<'a> {
+    pub fn new(str: &'a str) -> Self {
+        let line_offsets = LineOffsets::new(str);
         Self { str, line_offsets }
     }
-    pub fn get(&self, start: usize, end: usize) -> &str {
-        &self.str[start..end]
-    }
     pub fn offset_of(&self, line_column: LineColumn) -> usize {
-        let offset = self.line_offsets.0[line_column.line - 1];
+        let offset = self.offset_of_line(line_column.line);
         let s = &self.str[offset..];
         if let Some((index, _)) = s.char_indices().nth(line_column.column) {
             offset + index
@@ -21,11 +19,12 @@ impl Text {
             self.str.len()
         }
     }
-    pub fn end(&self) -> usize {
-        self.str.len()
+    pub fn offset_of_line(&self, line: usize) -> usize {
+        self.line_offsets.0[line - 1]
     }
 }
 
+#[derive(Debug)]
 struct LineOffsets(Vec<usize>);
 
 impl LineOffsets {
