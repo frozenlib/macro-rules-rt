@@ -3,7 +3,6 @@ use parser::MacroTranscriberItems;
 use proc_macro2::{Delimiter, Ident, LineColumn, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 use std::{collections::HashMap, str::FromStr};
-use structmeta::Parse;
 use syn::{
     braced, bracketed,
     buffer::Cursor,
@@ -335,14 +334,29 @@ fn insert_bind(
 /// Replacement pattern corresponding to `MacroTranscriber` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
 ///
 /// Does not include the outermost brace.
-#[derive(Debug, Parse)]
-pub struct Transcriber(MacroTranscriberItems);
+#[derive(Debug)]
+pub struct Transcriber {
+    source: Option<String>,
+    items: MacroTranscriberItems,
+}
+
+impl Parse for Transcriber {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Transcriber {
+            source: None,
+            items: input.parse()?,
+        })
+    }
+}
 
 impl FromStr for Transcriber {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        parse_str(s)
+        Ok(Transcriber {
+            source: Some(s.to_string()),
+            items: parse_str(s)?,
+        })
     }
 }
 
@@ -507,7 +521,7 @@ pub struct Rule {
 
 impl Rule {
     pub fn new(from: Matcher, to: Transcriber) -> Result<Self> {
-        let mut to = to.0.to_transcriber(&from.0.binds)?;
+        let mut to = to.items.to_transcriber(&from.0.binds)?;
         to.attach(&from.0)?;
         Ok(Rule { from, to })
     }
