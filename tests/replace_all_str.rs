@@ -145,6 +145,11 @@ fn repeat_separator() {
 }
 
 #[test]
+fn repeat_separator_joint() {
+    check("$(a)==*", "@", "a==a==a", "@");
+}
+
+#[test]
 fn rep_empty_content_and_some_sep() {
     check("$(),*", "@", ",,", "@");
 }

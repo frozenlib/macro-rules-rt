@@ -28,6 +28,11 @@ fn tts() -> impl Strategy<Value = TokenStream> {
     token_stream_strategy(10, 100, 20, 20)
 }
 
+#[test]
+fn test_0() {
+    let _ = check(TestArg::new(quote!(A), quote!(A), quote!(...)).unwrap());
+}
+
 #[derive(Arbitrary)]
 
 struct TokenStreamEx(#[strategy(tts())] TokenStream);
@@ -43,6 +48,18 @@ struct TestArg {
     to: TokenStream,
     rule: Rule,
     input: TokenStream,
+}
+
+impl TestArg {
+    fn new(from: TokenStream, to: TokenStream, input: TokenStream) -> syn::Result<Self> {
+        let rule = Rule::new(parse2(from.clone())?, parse2(to.clone())?)?;
+        Ok(Self {
+            from,
+            to,
+            rule,
+            input,
+        })
+    }
 }
 impl Arbitrary for TestArg {
     type Parameters = ();

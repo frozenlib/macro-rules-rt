@@ -1,16 +1,18 @@
 use crate::{
-    token_fragment::{ParseStreamEx, ResultStringBuilder, TokenFragment},
+    token_fragment::{
+        cts_len, CursorToken, CursorTokenTree, ParseStreamEx, ResultStringBuilder, TokenFragment,
+    },
     utils::{parse_macro_stmt, to_delimiter, LongTokenTree},
     Transcriber,
 };
 use proc_macro2::{Delimiter, Group, Span, TokenStream, TokenTree};
-use quote::ToTokens;
+use quote::{ToTokens, TokenStreamExt};
 use std::{collections::HashMap, ops::Range, str::FromStr};
 use structmeta::{Parse, ToTokens};
 use syn::{
     buffer::Cursor,
     ext::IdentExt,
-    parse::{Parse, ParseStream},
+    parse::{Parse, ParseStream, Parser},
     parse_str,
     spanned::Spanned,
     token, Block, Error, Expr, Ident, Item, Lifetime, Lit, MacroDelimiter, Meta, Pat, Path, Result,
@@ -18,8 +20,6 @@ use syn::{
 };
 
 pub use self::macro_flag_spec::MacroFlagSpec;
-
-type TokenIter<'a> = &'a mut proc_macro2::token_stream::IntoIter;
 
 #[derive(Debug)]
 pub struct FindAllParts(Vec<FindAllPart>);
@@ -31,16 +31,21 @@ impl FindAllParts {
         to: &Transcriber,
         input: TokenStream,
     ) -> TokenStream {
-        let mut output = Vec::new();
-        self.apply_tokens_to(index, to, &mut input.into_iter(), &mut output);
-        TokenStream::from_iter(output)
+        let mut output = TokenStream::new();
+        (|input: ParseStream| {
+            self.apply_tokens_to(index, to, input, &mut output);
+            Ok(())
+        })
+        .parse2(input)
+        .unwrap();
+        output
     }
     fn apply_tokens_to(
         &self,
         index: &mut usize,
         to: &Transcriber,
-        input: TokenIter,
-        output: &mut Vec<TokenTree>,
+        input: ParseStream,
+        output: &mut TokenStream,
     ) {
         while *index < self.0.len() {
             match &self.0[*index] {
@@ -48,11 +53,13 @@ impl FindAllParts {
                 FindAllPart::Match(p) => p.apply_tokens_to(input, to, output),
                 FindAllPart::GroupOpen => {
                     *index += 1;
-                    let Some(TokenTree::Group(g)) = input.next() else { unreachable!() };
+                    let Ok(g) = input.parse::<Group>() else {
+                        unreachable!()
+                    };
                     let mut g_new =
                         Group::new(g.delimiter(), self.apply_tokens(index, to, g.stream()));
                     g_new.set_span(g.span());
-                    output.push(TokenTree::Group(g_new));
+                    output.append(g_new);
                     assert!(matches!(self.0[*index], FindAllPart::GroupClose));
                 }
                 FindAllPart::GroupClose => return,
@@ -84,9 +91,10 @@ struct FindAllPartNoMatch {
     tts_and_tfs_len: usize,
 }
 impl FindAllPartNoMatch {
-    fn apply_tokens_to(&self, input: TokenIter, output: &mut Vec<TokenTree>) {
+    fn apply_tokens_to(&self, input: ParseStream, output: &mut TokenStream) {
         for _ in 0..self.tts_and_tfs_len {
-            output.push(input.next().unwrap());
+            let t: CursorToken = input.parse().unwrap();
+            t.to_tokens(output);
         }
     }
 }
@@ -94,12 +102,14 @@ impl FindAllPartNoMatch {
 #[derive(Debug)]
 struct FindAllPartMatch {
     m: RawMatch,
-    tts_len: usize,
+    cts_len: usize,
     tfs_len: usize,
 }
 impl FindAllPartMatch {
-    fn apply_tokens_to(&self, input: TokenIter, to: &Transcriber, output: &mut Vec<TokenTree>) {
-        input.nth(self.tts_len - 1).unwrap();
+    fn apply_tokens_to(&self, input: ParseStream, to: &Transcriber, output: &mut TokenStream) {
+        for _ in 0..self.cts_len {
+            let _: CursorTokenTree = input.parse().unwrap();
+        }
         to.apply_tokens_to(&self.m, output)
     }
     fn apply_string(&self, to: &Transcriber, b: &mut ResultStringBuilder) {
@@ -190,18 +200,9 @@ impl Matcher {
 fn match_part(m: RawMatch, start: Cursor, end: Cursor) -> FindAllPartMatch {
     FindAllPartMatch {
         m,
-        tts_len: tts_len(start, end),
-        tfs_len: TokenFragment::len_cursor(start, end),
+        cts_len: cts_len(start, end),
+        tfs_len: TokenFragment::len_from_cursor(start, end),
     }
-}
-fn tts_len(start: Cursor, end: Cursor) -> usize {
-    let mut cursor = start;
-    let mut len = 0;
-    while cursor != end {
-        cursor = cursor.token_tree().unwrap().1;
-        len += 1;
-    }
-    len
 }
 
 #[derive(Debug)]
@@ -465,7 +466,6 @@ impl RepPattern {
     }
 
     fn try_match_to(&self, input: &mut ParseStreamEx, m: &mut RawMatch) -> Result<MatchRep> {
-        dbg!(self);
         let mut ms = Vec::new();
         let mut is_next = false;
         while !input.is_empty() {

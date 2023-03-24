@@ -1,5 +1,5 @@
 use macro_rules_rt::{Matcher, Rule, Transcriber};
-use proc_macro2::TokenStream;
+use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::quote;
 use syn::parse2;
 
@@ -356,4 +356,21 @@ fn nested_rep() {
         { $($($a),+)@+ @@ },
         { a,b@c,d },
     };
+}
+
+#[test]
+fn lifetime() {
+    check! {
+        { 'a },
+        { 'b },
+        { 'a },
+    };
+}
+
+#[test]
+fn none_group() {
+    let mut ts = Vec::new();
+    ts.push(TokenTree::Group(Group::new(Delimiter::None, quote!(..=))));
+    let ts = TokenStream::from_iter(ts);
+    check_eq(quote!(a), quote!(a), ts.clone(), ts);
 }

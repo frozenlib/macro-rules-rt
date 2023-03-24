@@ -5,7 +5,7 @@ use crate::{
     ParseStreamEx, ResultStringBuilder, Source,
 };
 use proc_macro2::{Delimiter, Group, Ident, Span, TokenStream, TokenTree};
-use quote::ToTokens;
+use quote::{ToTokens, TokenStreamExt};
 use std::{ops::Range, str::FromStr};
 use structmeta::{Parse, ToTokens};
 use syn::{
@@ -57,7 +57,7 @@ impl Transcriber {
     pub(crate) fn apply_tokens(&self, m: &RawMatch) -> TokenStream {
         self.items.apply_tokens(m)
     }
-    pub(crate) fn apply_tokens_to(&self, m: &RawMatch, output: &mut Vec<TokenTree>) {
+    pub(crate) fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
         self.items.apply_tokens_to(m, output)
     }
     pub(crate) fn apply_string(&self, m: &RawMatch, b: &mut ResultStringBuilder) {
@@ -134,11 +134,11 @@ impl TranscriberItems {
         None
     }
     fn apply_tokens(&self, m: &RawMatch) -> TokenStream {
-        let mut output = Vec::new();
+        let mut output = TokenStream::new();
         self.apply_tokens_to(m, &mut output);
-        TokenStream::from_iter(output)
+        output
     }
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut Vec<TokenTree>) {
+    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
         for item in &self.items {
             item.apply_tokens_to(m, output);
         }
@@ -207,9 +207,9 @@ impl TranscriberItem {
             TranscriberItem::Rep(r) => Some(r.var.clone()),
         }
     }
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut Vec<TokenTree>) {
+    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
         match self {
-            TranscriberItem::Tokens(t) => output.extend(t.tokens.clone()),
+            TranscriberItem::Tokens(t) => t.tokens.to_tokens(output),
             TranscriberItem::String(_) => {}
             TranscriberItem::Group(g) => g.apply_tokens_to(m, output),
             TranscriberItem::Var(v) => v.apply_tokens_to(m, output),
@@ -236,7 +236,7 @@ struct TranscriberTokens {
 impl TranscriberTokens {
     fn apply_string(&self, is_ready_string: bool, b: &mut ResultStringBuilder) {
         if !is_ready_string {
-            b.b.push_tokens(self.tokens.clone())
+            b.b.push_tokens(&self.tokens)
         }
     }
 }
@@ -256,10 +256,10 @@ impl TranscriberGroup {
         tfs_range.push(self.tfs_range_close.clone());
     }
 
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut Vec<TokenTree>) {
+    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
         let mut g = Group::new(self.delimiter, self.content.apply_tokens(m));
         g.set_span(self.span);
-        output.push(TokenTree::Group(g));
+        output.append(g);
     }
 
     fn apply_string(&self, is_ready_string: bool, m: &RawMatch, b: &mut ResultStringBuilder) {
@@ -307,8 +307,8 @@ impl TranscriberVar {
             bail!(span, "attempted to repeat an expression containing no syntax variables matched as repeating at this depth")
         }
     }
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut Vec<TokenTree>) {
-        output.extend(m.vars[self.var_index].tokens.clone());
+    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
+        m.vars[self.var_index].tokens.to_tokens(output);
     }
 
     fn apply_string(&self, m: &RawMatch, b: &mut ResultStringBuilder) {
@@ -367,12 +367,12 @@ impl TranscriberRep {
         bail!(self.var.span(), "attempted to repeat an expression containing no syntax variables matched as repeating at this depth")
     }
 
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut Vec<TokenTree>) {
+    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
         let mut is_next = false;
         for m in &m.reps[self.rep_index].0 {
             if is_next {
                 if let Some(sep) = &self.sep.0 {
-                    output.extend(sep.to_token_stream());
+                    sep.to_tokens(output);
                 }
             }
             is_next = true;
@@ -385,7 +385,7 @@ impl TranscriberRep {
         for m in &m.reps[self.rep_index].0 {
             if is_next {
                 if let Some(sep) = &self.sep.0 {
-                    b.b.push_tokens(sep.to_token_stream());
+                    b.b.push_tokens(&sep.to_token_stream());
                 }
             }
             is_next = true;

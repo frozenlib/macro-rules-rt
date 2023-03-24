@@ -2,26 +2,117 @@ use crate::{
     text::Text,
     utils::{to_close_str, to_open_str},
 };
-use proc_macro2::{Group, LineColumn, Span, TokenStream, TokenTree};
-use std::{fmt::Write, ops::Range};
+use proc_macro2::{extra::DelimSpan, Delimiter, Group, LineColumn, Span, TokenStream};
+use quote::ToTokens;
+use std::{fmt::Write, mem::take, ops::Range};
+use structmeta::{Parse, ToTokens};
 use syn::{
     buffer::Cursor,
     parse::{discouraged::Speculative, Parse, ParseBuffer, ParseStream, Parser, Peek},
-    Result,
+    spanned::Spanned,
+    Lifetime, Result,
 };
+
+#[derive(ToTokens, Debug, Clone)]
+pub enum CursorToken {
+    Ident(proc_macro2::Ident),
+    Punct(proc_macro2::Punct),
+    Literal(proc_macro2::Literal),
+    Lifetime(Lifetime),
+}
+impl Parse for CursorToken {
+    fn parse(input: ParseStream) -> Result<Self> {
+        input.step(|cursor| {
+            if let Some((token, next)) = cursor_token(*cursor) {
+                Ok((token, next))
+            } else {
+                Err(cursor.error("expected token"))
+            }
+        })
+    }
+}
+fn cursor_token(cursor: Cursor) -> Option<(CursorToken, Cursor)> {
+    if let Some((ident, next)) = cursor.ident() {
+        Some((CursorToken::Ident(ident), next))
+    } else if let Some((punct, next)) = cursor.punct() {
+        Some((CursorToken::Punct(punct), next))
+    } else if let Some((lit, next)) = cursor.literal() {
+        Some((CursorToken::Literal(lit), next))
+    } else if let Some((lt, next)) = cursor.lifetime() {
+        Some((CursorToken::Lifetime(lt), next))
+    } else {
+        None
+    }
+}
+
+#[derive(ToTokens, Debug, Clone)]
+pub struct SomeGroup(proc_macro2::Group);
+
+impl Parse for SomeGroup {
+    fn parse(input: ParseStream) -> Result<Self> {
+        input.step(|cursor| {
+            if let Some((inside, delimiter, delim_span, next)) = some_group(*cursor) {
+                let mut group = Group::new(delimiter, inside.token_stream());
+                group.set_span(delim_span.span());
+                Ok((Self(group), next))
+            } else {
+                Err(cursor.error("expected group"))
+            }
+        })
+    }
+}
+fn some_group(cursor: Cursor) -> Option<(Cursor, Delimiter, DelimSpan, Cursor)> {
+    for delimiter in [Delimiter::Parenthesis, Delimiter::Brace, Delimiter::Bracket] {
+        if let Some((inside, delim_span, next)) = cursor.group(delimiter) {
+            return Some((inside, delimiter, delim_span, next));
+        }
+    }
+    None
+}
+
+#[derive(Parse, ToTokens, Debug, Clone)]
+pub enum CursorTokenTree {
+    Token(CursorToken),
+    Group(SomeGroup),
+}
+
+pub fn cts_len(start: Cursor, end: Cursor) -> usize {
+    let mut cursor = start;
+    let mut len = 0;
+    let mut fail = false;
+    while cursor != end {
+        if let Some((_, next)) = cursor_token(cursor) {
+            fail = false;
+            cursor = next;
+            len += 1;
+            continue;
+        }
+        if let Some((_, _, _, next)) = some_group(cursor) {
+            fail = false;
+            cursor = next;
+            len += 1;
+            continue;
+        }
+        if fail {
+            panic!("cts_len failed");
+        }
+        fail = true;
+    }
+    len
+}
 
 #[derive(Debug, Clone)]
 pub enum TokenFragment {
-    TokenTree(TokenTree),
-    GroupOpen(Group),
-    GroupClose(Group),
+    Token(CursorToken),
+    GroupOpen { span: Span, delimiter: Delimiter },
+    GroupClose { span: Span, delimiter: Delimiter },
 }
 impl TokenFragment {
     pub fn span(&self) -> Span {
         match self {
-            TokenFragment::TokenTree(tt) => tt.span(),
-            TokenFragment::GroupOpen(g) => g.span(),
-            TokenFragment::GroupClose(g) => g.span(),
+            TokenFragment::Token(t) => t.span(),
+            TokenFragment::GroupOpen { span, .. } => *span,
+            TokenFragment::GroupClose { span, .. } => *span,
         }
     }
     pub fn build(tokens: TokenStream) -> Vec<Self> {
@@ -30,33 +121,50 @@ impl TokenFragment {
         items
     }
     pub fn for_each_tokens(tokens: TokenStream, f: &mut impl FnMut(&TokenFragment)) {
-        tokens
-            .into_iter()
-            .for_each(|tt| Self::for_each_token(tt, f));
+        (|input: ParseStream| {
+            input.step(|cursor| Ok(((), Self::for_each_cursor(*cursor, None, f))))
+        })
+        .parse2(tokens)
+        .unwrap();
     }
     pub fn for_each_cursor<'a>(
-        mut start: Cursor<'a>,
-        end: Cursor<'a>,
+        start: Cursor<'a>,
+        end: Option<Cursor<'a>>,
         f: &mut impl FnMut(&TokenFragment),
-    ) {
-        while start != end {
-            let tt;
-            (tt, start) = start.token_tree().unwrap();
-            Self::for_each_token(tt, f);
+    ) -> Cursor<'a> {
+        let mut cursor = start;
+        let mut fail = false;
+        while !cursor.eof() && Some(cursor) != end {
+            if let Some((token, next)) = cursor_token(cursor) {
+                fail = false;
+                f(&TokenFragment::Token(token));
+                cursor = next;
+                continue;
+            }
+            if let Some((inner, delimiter, delim_span, next)) = some_group(cursor) {
+                fail = false;
+                f(&TokenFragment::GroupOpen {
+                    span: delim_span.open(),
+                    delimiter,
+                });
+                Self::for_each_cursor(inner, None, f);
+                f(&TokenFragment::GroupClose {
+                    span: delim_span.close(),
+                    delimiter,
+                });
+                cursor = next;
+                continue;
+            }
+            if fail {
+                panic!("TokenFragmenet traverse failed");
+            }
+            fail = true;
         }
+        cursor
     }
-    pub fn for_each_token(tt: TokenTree, f: &mut impl FnMut(&TokenFragment)) {
-        if let TokenTree::Group(g) = tt {
-            f(&TokenFragment::GroupOpen(g.clone()));
-            TokenFragment::for_each_tokens(g.stream(), f);
-            f(&TokenFragment::GroupClose(g));
-        } else {
-            f(&TokenFragment::TokenTree(tt));
-        }
-    }
-    pub fn len_cursor<'a>(start: Cursor<'a>, end: Cursor<'a>) -> usize {
+    pub fn len_from_cursor<'a>(start: Cursor<'a>, end: Cursor<'a>) -> usize {
         let mut count = 0;
-        Self::for_each_cursor(start, end, &mut |_| count += 1);
+        Self::for_each_cursor(start, Some(end), &mut |_| count += 1);
         count
     }
 }
@@ -98,7 +206,7 @@ impl<'a> ParseStreamEx<'a> {
     pub fn parse_with<T>(&mut self, parser: impl FnOnce(ParseStream) -> Result<T>) -> Result<T> {
         let mut fork = self.input.fork();
         let value = parser(&mut fork)?;
-        self.tfs_offset += TokenFragment::len_cursor(self.input.cursor(), fork.cursor());
+        self.tfs_offset += TokenFragment::len_from_cursor(self.input.cursor(), fork.cursor());
         self.input.advance_to(&fork);
         Ok(value)
     }
@@ -263,24 +371,23 @@ impl<'a> TokenStringBuilder<'a> {
         self.push_tokens_by(fs1);
     }
     fn push_tokens_by(&mut self, fs: &[TokenFragment]) {
-        let mut tts = Vec::new();
+        let mut ts = TokenStream::new();
         for f in fs {
             match f {
-                TokenFragment::TokenTree(tt) => tts.push(tt.clone()),
-                TokenFragment::GroupOpen(g) => {
-                    self.push_tokens(tts.drain(..));
-                    self.push_str(to_open_str(g.delimiter()));
+                TokenFragment::Token(t) => t.to_tokens(&mut ts),
+                TokenFragment::GroupOpen { delimiter, .. } => {
+                    self.push_tokens(&take(&mut ts));
+                    self.push_str(to_open_str(*delimiter));
                 }
-                TokenFragment::GroupClose(g) => {
-                    self.push_tokens(tts.drain(..));
-                    self.push_str(to_close_str(g.delimiter()));
+                TokenFragment::GroupClose { delimiter, .. } => {
+                    self.push_tokens(&take(&mut ts));
+                    self.push_str(to_close_str(*delimiter));
                 }
             }
         }
-        self.push_tokens(tts.drain(..));
+        self.push_tokens(&ts);
     }
-    pub fn push_tokens(&mut self, tts: impl IntoIterator<Item = TokenTree>) {
-        let ts = TokenStream::from_iter(tts);
+    pub fn push_tokens(&mut self, ts: &TokenStream) {
         if ts.is_empty() {
             return;
         }
