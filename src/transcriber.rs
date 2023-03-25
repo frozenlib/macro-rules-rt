@@ -16,9 +16,11 @@ use syn::{
     token, Error, Result, Token,
 };
 
-/// Replacement pattern corresponding to `MacroTranscriber` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
+/// Replacement pattern.
 ///
-/// Does not include the outermost brace.
+/// `Transcriber` corresponds to `MacroTranscriber` (excluding outermost brace) in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
+///
+/// A `Transcriber` created using [`FromStr::from_str`] preserves whitespace in the original string as much as possible.
 #[derive(Debug)]
 pub struct Transcriber {
     items: TranscriberItems,

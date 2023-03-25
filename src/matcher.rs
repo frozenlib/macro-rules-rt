@@ -118,7 +118,9 @@ impl FindAllPartMatch {
     }
 }
 
-/// Search pattern corresponding to `MacroMatch*` in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
+/// Search pattern.
+///
+/// `Matcher` corresponds to `MacroMatch*` (excluding outermost brace) in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
 #[derive(Debug)]
 pub struct Matcher(pub(crate) PatternItems);
 

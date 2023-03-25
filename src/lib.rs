@@ -22,6 +22,9 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// Create a new `Rule` from `Matcher` and `Transcriber`.
+    ///
+    /// Returns an error if the meta-variables of `Matcher` and `Transcriber` do not match.
     pub fn new(from: Matcher, mut to: Transcriber) -> Result<Self> {
         to.attach(&from.0)?;
         Ok(Rule { from, to })
@@ -37,7 +40,7 @@ impl Rule {
     /// Replaces all non-overlapping matches in input with the provided transcriber.
     ///
     /// Unlike creating `TokenStream` from `str` and then calling [`Rule::replace_all`],
-    /// the original string is preserved for the parts that are not replaced.
+    /// the original string is preserved as much as possible.
     pub fn replace_all_str(&self, input: &str) -> Result<String> {
         let input = Source::new(input, parse_str(input)?);
         let mut b = ResultStringBuilder::new(&input);
