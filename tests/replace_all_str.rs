@@ -1,4 +1,6 @@
 use macro_rules_rt::{Matcher, Rule, Transcriber};
+use proc_macro2::TokenStream;
+use syn::{parse2, parse_str};
 
 fn check(from: &str, to: &str, input: &str, expect: &str) {
     let msg = format!(
@@ -7,11 +9,28 @@ from  = {from},
 to    = {to}
 input = {input}"
     );
-    let from: Matcher = from.parse().unwrap();
-    let to: Transcriber = to.parse().unwrap();
-    let rule = Rule::new(from, to).unwrap();
-    let actual = rule.replace_all_str(input).unwrap();
-    assert_eq!(actual, expect, "{msg}");
+    {
+        let from: Matcher = from.parse().unwrap();
+        let to: Transcriber = to.parse().unwrap();
+        let rule = Rule::new(from, to).unwrap();
+        let actual = rule.replace_all_str(input).unwrap();
+        assert_eq!(actual, expect, "replace_all_str str {msg}");
+    }
+    {
+        let from: TokenStream = parse_str(from).unwrap();
+        let to: TokenStream = parse_str(to).unwrap();
+
+        let from: Matcher = parse2(from).unwrap();
+        let to: Transcriber = parse2(to).unwrap();
+        let rule = Rule::new(from, to).unwrap();
+        let actual = rule.replace_all_str(input).unwrap();
+        assert_eq!(actual, expect, "replace_all_str tokens {msg}");
+
+        let input: TokenStream = input.parse().unwrap();
+        let expect: TokenStream = expect.parse().unwrap();
+        let actual = rule.replace_all(input);
+        assert_eq!(actual.to_string(), expect.to_string(), "replace_all {msg}");
+    }
 }
 
 #[test]
