@@ -84,6 +84,23 @@
     },
     {
       "type": "shell",
+      "label": "cargo watch nextest",
+      "command": "wt",
+      "args": [
+        "new-tab",
+        "cargo-watch",
+        "-c",
+        "-x",
+        "nextest run",
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "type": "shell",
       "label": "cargo run exmaple",
       "command": "cargo",
       "args": [
