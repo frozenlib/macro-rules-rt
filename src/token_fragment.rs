@@ -17,6 +17,94 @@ use syn::{
     Lifetime, Result, Token,
 };
 
+#[derive(ToTokens, Debug, Clone)]
+pub struct SomeGroup(pub proc_macro2::Group);
+
+impl Parse for SomeGroup {
+    fn parse(input: ParseStream) -> Result<Self> {
+        input.step(|cursor| {
+            if let Some((inside, delimiter, delim_span, next)) = some_group(*cursor) {
+                let mut group = Group::new(delimiter, inside.token_stream());
+                group.set_span(delim_span.span());
+                Ok((Self(group), next))
+            } else {
+                Err(cursor.error("expected group"))
+            }
+        })
+    }
+}
+fn some_group(cursor: Cursor) -> Option<(Cursor, Delimiter, DelimSpan, Cursor)> {
+    for delimiter in [Delimiter::Parenthesis, Delimiter::Brace, Delimiter::Bracket] {
+        if let Some((inside, delim_span, next)) = cursor.group(delimiter) {
+            return Some((inside, delimiter, delim_span, next));
+        }
+    }
+    None
+}
+
+#[derive(ToTokens, Debug, Clone)]
+pub enum CursorToken {
+    Ident(proc_macro2::Ident),
+    Punct(proc_macro2::Punct),
+    Literal(proc_macro2::Literal),
+    Lifetime(Lifetime),
+}
+impl Parse for CursorToken {
+    fn parse(input: ParseStream) -> Result<Self> {
+        input.step(|cursor| {
+            if let Some((token, next)) = cursor_token(*cursor) {
+                Ok((token, next))
+            } else {
+                Err(cursor.error("expected token"))
+            }
+        })
+    }
+}
+fn cursor_token(cursor: Cursor) -> Option<(CursorToken, Cursor)> {
+    if let Some((ident, next)) = cursor.ident() {
+        Some((CursorToken::Ident(ident), next))
+    } else if let Some((punct, next)) = cursor.punct() {
+        Some((CursorToken::Punct(punct), next))
+    } else if let Some((lit, next)) = cursor.literal() {
+        Some((CursorToken::Literal(lit), next))
+    } else if let Some((lt, next)) = cursor.lifetime() {
+        Some((CursorToken::Lifetime(lt), next))
+    } else {
+        None
+    }
+}
+
+#[derive(Parse, ToTokens, Debug, Clone)]
+pub enum CursorTokenTree {
+    Token(CursorToken),
+    Group(SomeGroup),
+}
+
+pub fn cts_len(start: Cursor, end: Cursor) -> usize {
+    let mut cursor = start;
+    let mut len = 0;
+    let mut fail = false;
+    while cursor != end {
+        if let Some((_, next)) = cursor_token(cursor) {
+            fail = false;
+            cursor = next;
+            len += 1;
+            continue;
+        }
+        if let Some((_, _, _, next)) = some_group(cursor) {
+            fail = false;
+            cursor = next;
+            len += 1;
+            continue;
+        }
+        if fail {
+            panic!("cts_len failed");
+        }
+        fail = true;
+    }
+    len
+}
+
 #[derive(Parse, ToTokens, Debug, Clone)]
 pub enum LongPunct {
     AndAnd(Token![&&]),
@@ -100,94 +188,6 @@ impl Display for LongToken {
 pub enum LongTokenTree {
     Token(LongToken),
     Group(SomeGroup),
-}
-
-#[derive(ToTokens, Debug, Clone)]
-pub enum CursorToken {
-    Ident(proc_macro2::Ident),
-    Punct(proc_macro2::Punct),
-    Literal(proc_macro2::Literal),
-    Lifetime(Lifetime),
-}
-impl Parse for CursorToken {
-    fn parse(input: ParseStream) -> Result<Self> {
-        input.step(|cursor| {
-            if let Some((token, next)) = cursor_token(*cursor) {
-                Ok((token, next))
-            } else {
-                Err(cursor.error("expected token"))
-            }
-        })
-    }
-}
-fn cursor_token(cursor: Cursor) -> Option<(CursorToken, Cursor)> {
-    if let Some((ident, next)) = cursor.ident() {
-        Some((CursorToken::Ident(ident), next))
-    } else if let Some((punct, next)) = cursor.punct() {
-        Some((CursorToken::Punct(punct), next))
-    } else if let Some((lit, next)) = cursor.literal() {
-        Some((CursorToken::Literal(lit), next))
-    } else if let Some((lt, next)) = cursor.lifetime() {
-        Some((CursorToken::Lifetime(lt), next))
-    } else {
-        None
-    }
-}
-
-#[derive(ToTokens, Debug, Clone)]
-pub struct SomeGroup(pub proc_macro2::Group);
-
-impl Parse for SomeGroup {
-    fn parse(input: ParseStream) -> Result<Self> {
-        input.step(|cursor| {
-            if let Some((inside, delimiter, delim_span, next)) = some_group(*cursor) {
-                let mut group = Group::new(delimiter, inside.token_stream());
-                group.set_span(delim_span.span());
-                Ok((Self(group), next))
-            } else {
-                Err(cursor.error("expected group"))
-            }
-        })
-    }
-}
-fn some_group(cursor: Cursor) -> Option<(Cursor, Delimiter, DelimSpan, Cursor)> {
-    for delimiter in [Delimiter::Parenthesis, Delimiter::Brace, Delimiter::Bracket] {
-        if let Some((inside, delim_span, next)) = cursor.group(delimiter) {
-            return Some((inside, delimiter, delim_span, next));
-        }
-    }
-    None
-}
-
-#[derive(Parse, ToTokens, Debug, Clone)]
-pub enum CursorTokenTree {
-    Token(CursorToken),
-    Group(SomeGroup),
-}
-
-pub fn cts_len(start: Cursor, end: Cursor) -> usize {
-    let mut cursor = start;
-    let mut len = 0;
-    let mut fail = false;
-    while cursor != end {
-        if let Some((_, next)) = cursor_token(cursor) {
-            fail = false;
-            cursor = next;
-            len += 1;
-            continue;
-        }
-        if let Some((_, _, _, next)) = some_group(cursor) {
-            fail = false;
-            cursor = next;
-            len += 1;
-            continue;
-        }
-        if fail {
-            panic!("cts_len failed");
-        }
-        fail = true;
-    }
-    len
 }
 
 #[derive(Debug, Clone)]
