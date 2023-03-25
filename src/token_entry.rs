@@ -13,6 +13,7 @@ use structmeta::{Parse, ToTokens};
 use syn::{
     buffer::Cursor,
     parse::{discouraged::Speculative, Parse, ParseBuffer, ParseStream, Parser, Peek},
+    parse_str,
     spanned::Spanned,
     Lifetime, Result, Token,
 };
@@ -274,28 +275,28 @@ pub struct GroupEx {
     pub tes_range_close: Range<usize>,
 }
 
-enum CowParseBuffer<'a> {
+enum MaybeOwnedParseBuffer<'a> {
     Owned(ParseBuffer<'a>),
     Borrowed(&'a ParseBuffer<'a>),
 }
-impl<'a> std::ops::Deref for CowParseBuffer<'a> {
+impl<'a> std::ops::Deref for MaybeOwnedParseBuffer<'a> {
     type Target = ParseBuffer<'a>;
     fn deref(&self) -> &Self::Target {
         match self {
-            CowParseBuffer::Owned(x) => x,
-            CowParseBuffer::Borrowed(x) => x,
+            Self::Owned(x) => x,
+            Self::Borrowed(x) => x,
         }
     }
 }
 
 pub struct ParseStreamEx<'a> {
-    input: CowParseBuffer<'a>,
+    input: MaybeOwnedParseBuffer<'a>,
     pub tes_offset: usize,
 }
 impl<'a> ParseStreamEx<'a> {
     pub fn new(input: ParseStream<'a>, tes_offset: usize) -> Self {
         Self {
-            input: CowParseBuffer::Borrowed(input),
+            input: MaybeOwnedParseBuffer::Borrowed(input),
             tes_offset,
         }
     }
@@ -327,7 +328,7 @@ impl<'a> ParseStreamEx<'a> {
     }
     pub fn fork(&self) -> Self {
         Self {
-            input: CowParseBuffer::Owned(self.input.fork()),
+            input: MaybeOwnedParseBuffer::Owned(self.input.fork()),
             tes_offset: self.tes_offset,
         }
     }
@@ -358,11 +359,11 @@ impl<'a> ParseStreamEx<'a> {
     }
 
     pub fn parse_from_tokens<T>(
-        tokens: TokenStream,
+        input: TokenStream,
         tes_offset: usize,
         f: impl FnOnce(&mut ParseStreamEx) -> Result<T>,
     ) -> Result<T> {
-        (|input: ParseStream| f(&mut ParseStreamEx::new(input, tes_offset))).parse2(tokens)
+        (|input: ParseStream| f(&mut ParseStreamEx::new(input, tes_offset))).parse2(input)
     }
 
     pub fn advance_to(&mut self, fork: &ParseStreamEx) {
@@ -405,22 +406,17 @@ impl TokenOffsets {
 #[derive(Debug)]
 pub struct Source<'a> {
     text: Text<'a>,
-    pub tokens: TokenStream,
     tes: Vec<TokenEntry>,
     offsets: TokenOffsets,
 }
 
 impl<'a> Source<'a> {
-    pub fn new(str: &'a str, tokens: TokenStream) -> Self {
+    pub fn from_str(str: &'a str) -> Result<(Self, TokenStream)> {
+        let tokens: TokenStream = parse_str(str)?;
         let text = Text::new(str);
         let tes = TokenEntry::build(tokens.clone());
         let offsets = TokenOffsets::new(&tes, &text);
-        Self {
-            text,
-            tes,
-            tokens,
-            offsets,
-        }
+        Ok((Self { text, tes, offsets }, tokens))
     }
 
     fn get(&self, range: Range<usize>) -> (&[TokenEntry], &str, &[TokenEntry]) {
@@ -452,19 +448,19 @@ impl<'a> Source<'a> {
 }
 
 pub struct TokenStringBuilder<'a> {
-    input: &'a Source<'a>,
+    source: &'a Source<'a>,
     pub s: String,
 }
 
 impl<'a> TokenStringBuilder<'a> {
-    pub fn new(input: &'a Source<'a>) -> Self {
+    pub fn new(source: &'a Source<'a>) -> Self {
         Self {
-            input,
+            source,
             s: String::new(),
         }
     }
     pub fn push_tes(&mut self, tes_range: Range<usize>) {
-        let (fs0, s, fs1) = self.input.get(tes_range);
+        let (fs0, s, fs1) = self.source.get(tes_range);
         self.push_tokens_by(fs0);
         self.push_str(s);
         self.push_tokens_by(fs1);
@@ -511,19 +507,22 @@ impl<'a> TokenStringBuilder<'a> {
         }
     }
 }
+fn is_code_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\n' | '\r')
+}
 
-pub struct ResultStringBuilder<'a> {
-    pub b: TokenStringBuilder<'a>,
+pub struct FindAllStringBuilder<'a, 'b> {
+    pub b: &'a mut TokenStringBuilder<'b>,
     no_match_start: usize,
     no_match_end: usize,
 }
 
-impl<'a> ResultStringBuilder<'a> {
-    pub fn new(input: &'a Source<'a>) -> Self {
+impl<'a, 'b> FindAllStringBuilder<'a, 'b> {
+    pub fn new(b: &'a mut TokenStringBuilder<'b>, offset: usize) -> Self {
         Self {
-            b: TokenStringBuilder::new(input),
-            no_match_start: 0,
-            no_match_end: 0,
+            b,
+            no_match_start: offset,
+            no_match_end: offset,
         }
     }
     pub fn push_no_match(&mut self, tes_len: usize) {
@@ -534,11 +533,4 @@ impl<'a> ResultStringBuilder<'a> {
         self.no_match_end += tes_len;
         self.no_match_start = self.no_match_end;
     }
-    pub fn build(mut self) -> String {
-        self.commit_no_match(0);
-        self.b.s
-    }
-}
-fn is_code_space(c: char) -> bool {
-    matches!(c, ' ' | '\t' | '\n' | '\r')
 }

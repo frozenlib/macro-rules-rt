@@ -1,10 +1,10 @@
 use crate::{
     token_entry::{
-        cts_len, CursorToken, CursorTokenTree, LongToken, LongTokenTree, ParseStreamEx,
-        ResultStringBuilder, TokenEntry,
+        cts_len, CursorToken, CursorTokenTree, FindAllStringBuilder, LongToken, LongTokenTree,
+        ParseStreamEx, TokenEntry, TokenStringBuilder,
     },
     utils::{parse_macro_stmt, to_delimiter},
-    Transcriber,
+    Rule,
 };
 use proc_macro2::{Delimiter, Group, Span, TokenStream};
 use quote::{ToTokens, TokenStreamExt};
@@ -26,41 +26,45 @@ pub use self::macro_flag_spec::MacroFlagSpec;
 pub struct FindAllParts(Vec<FindAllPart>);
 
 impl FindAllParts {
-    pub fn apply_tokens(
+    pub fn apply_tokens(&self, index: &mut usize, input: TokenStream, rule: &Rule) -> TokenStream {
+        let mut tokens = TokenStream::new();
+        self.apply_tokens_to(index, input, rule, &mut tokens);
+        tokens
+    }
+    pub fn apply_tokens_to(
         &self,
         index: &mut usize,
-        to: &Transcriber,
         input: TokenStream,
-    ) -> TokenStream {
-        let mut output = TokenStream::new();
+        rule: &Rule,
+        tokens: &mut TokenStream,
+    ) {
         (|input: ParseStream| {
-            self.apply_tokens_to(index, to, input, &mut output);
+            self.apply_tokens_parser(index, input, rule, tokens);
             Ok(())
         })
         .parse2(input)
         .unwrap();
-        output
     }
-    fn apply_tokens_to(
+    fn apply_tokens_parser(
         &self,
         index: &mut usize,
-        to: &Transcriber,
         input: ParseStream,
-        output: &mut TokenStream,
+        rule: &Rule,
+        tokens: &mut TokenStream,
     ) {
         while *index < self.0.len() {
             match &self.0[*index] {
-                FindAllPart::NoMatch(p) => p.apply_tokens_to(input, output),
-                FindAllPart::Match(p) => p.apply_tokens_to(input, to, output),
+                FindAllPart::NoMatch(p) => p.apply_tokens_to(input, tokens),
+                FindAllPart::Match(p) => p.apply_tokens_to(input, rule, tokens),
                 FindAllPart::GroupOpen => {
                     *index += 1;
                     let Ok(g) = input.parse::<Group>() else {
                         unreachable!()
                     };
                     let mut g_new =
-                        Group::new(g.delimiter(), self.apply_tokens(index, to, g.stream()));
+                        Group::new(g.delimiter(), self.apply_tokens(index, g.stream(), rule));
                     g_new.set_span(g.span());
-                    output.append(g_new);
+                    tokens.append(g_new);
                     assert!(matches!(self.0[*index], FindAllPart::GroupClose));
                 }
                 FindAllPart::GroupClose => return,
@@ -68,14 +72,15 @@ impl FindAllParts {
             *index += 1;
         }
     }
-    pub(crate) fn apply_string(&self, to: &Transcriber, b: &mut ResultStringBuilder) {
+    pub fn apply_string(&self, rule: &Rule, b: &mut FindAllStringBuilder) {
         for p in &self.0 {
             match p {
                 FindAllPart::NoMatch(p) => b.push_no_match(p.tts_and_tes_len),
-                FindAllPart::Match(p) => p.apply_string(to, b),
+                FindAllPart::Match(p) => p.apply_string(rule, b),
                 FindAllPart::GroupOpen | FindAllPart::GroupClose => b.push_no_match(1),
             }
         }
+        b.commit_no_match(0);
     }
 }
 
@@ -92,10 +97,10 @@ struct FindAllPartNoMatch {
     tts_and_tes_len: usize,
 }
 impl FindAllPartNoMatch {
-    fn apply_tokens_to(&self, input: ParseStream, output: &mut TokenStream) {
+    fn apply_tokens_to(&self, input: ParseStream, tokens: &mut TokenStream) {
         for _ in 0..self.tts_and_tes_len {
             let t: CursorToken = input.parse().unwrap();
-            t.to_tokens(output);
+            t.to_tokens(tokens);
         }
     }
 }
@@ -107,15 +112,26 @@ struct FindAllPartMatch {
     tes_len: usize,
 }
 impl FindAllPartMatch {
-    fn apply_tokens_to(&self, input: ParseStream, to: &Transcriber, output: &mut TokenStream) {
+    fn apply_tokens_to(&self, input: ParseStream, rule: &Rule, tokens: &mut TokenStream) {
         for _ in 0..self.cts_len {
             let _: CursorTokenTree = input.parse().unwrap();
         }
-        to.apply_tokens_to(&self.m, output)
+        let mut b = MatchTokensBuilder {
+            tokens,
+            rule,
+            tes_len: self.tes_len,
+        };
+        rule.to.apply_tokens_to(&self.m, &mut b);
     }
-    fn apply_string(&self, to: &Transcriber, b: &mut ResultStringBuilder) {
+    fn apply_string(&self, rule: &Rule, b: &mut FindAllStringBuilder) {
         b.commit_no_match(self.tes_len);
-        to.apply_string(&self.m, b);
+        let b = MatchStringBuilder {
+            b: b.b,
+            rule,
+            tes_len: self.tes_len,
+            is_ready_string: false,
+        };
+        rule.to.apply_string(&self.m, b);
     }
 }
 
@@ -145,14 +161,19 @@ impl Matcher {
         self.0.try_match(input)
     }
 
-    pub(crate) fn find_all(&self, input: TokenStream) -> FindAllParts {
+    pub(crate) fn find_all(&self, input: TokenStream, tes_offset: usize) -> FindAllParts {
         let mut parts = Vec::new();
-        self.find_all_parts(input, &mut parts);
+        self.find_all_parts(input, tes_offset, &mut parts);
         FindAllParts(parts)
     }
 
-    fn find_all_parts(&self, input: TokenStream, parts: &mut Vec<FindAllPart>) -> bool {
-        ParseStreamEx::parse_from_tokens(input, 0, |input: &mut ParseStreamEx| {
+    fn find_all_parts(
+        &self,
+        input: TokenStream,
+        tes_offset: usize,
+        parts: &mut Vec<FindAllPart>,
+    ) -> bool {
+        ParseStreamEx::parse_from_tokens(input, tes_offset, |input: &mut ParseStreamEx| {
             Ok(self.find_all_parts_parser(input, parts))
         })
         .unwrap()
@@ -672,8 +693,36 @@ impl RawMatch {
 
 #[derive(Debug)]
 pub struct MatchVar {
-    pub tokens: TokenStream,
-    pub tes_range: Range<usize>,
+    tokens: TokenStream,
+    tes_range: Range<usize>,
+}
+
+impl MatchVar {
+    pub fn apply_tokens_to(&self, b: &mut MatchTokensBuilder) {
+        if let Some(find_all) = self.try_find_all(b.rule, b.tes_len) {
+            find_all.apply_tokens_to(&mut 0, self.tokens.clone(), b.rule, b.tokens);
+        } else {
+            self.tokens.to_tokens(b.tokens);
+        }
+    }
+    pub fn apply_string(&self, b: &mut MatchStringBuilder) {
+        if let Some(find_all) = self.try_find_all(b.rule, b.tes_len) {
+            find_all.apply_string(
+                b.rule,
+                &mut FindAllStringBuilder::new(b.b, self.tes_range.start),
+            );
+        } else {
+            b.b.push_tes(self.tes_range.clone());
+        }
+    }
+    fn try_find_all(&self, rule: &Rule, tes_len: usize) -> Option<FindAllParts> {
+        let tes_range = self.tes_range.clone();
+        if tes_range.end - tes_range.start < tes_len && rule.to.nest {
+            Some(rule.from.find_all(self.tokens.clone(), tes_range.start))
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -726,4 +775,17 @@ impl MacroRepOp {
     pub fn is_zero_or_one(self) -> bool {
         matches!(self, Self::ZeroOrOne(_))
     }
+}
+
+pub struct MatchStringBuilder<'a, 'b> {
+    pub b: &'a mut TokenStringBuilder<'b>,
+    pub rule: &'a Rule,
+    pub tes_len: usize,
+    pub is_ready_string: bool,
+}
+
+pub struct MatchTokensBuilder<'a> {
+    pub tokens: &'a mut TokenStream,
+    pub rule: &'a Rule,
+    pub tes_len: usize,
 }

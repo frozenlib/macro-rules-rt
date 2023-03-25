@@ -1,8 +1,9 @@
 #![warn(clippy::redundant_pub_crate)]
 
+use matcher::MatchTokensBuilder;
 use proc_macro2::TokenStream;
-use syn::{parse_str, Result};
-use token_entry::{ParseStreamEx, ResultStringBuilder, Source};
+use syn::Result;
+use token_entry::{FindAllStringBuilder, ParseStreamEx, Source, TokenStringBuilder};
 
 pub use matcher::Matcher;
 pub use transcriber::Transcriber;
@@ -33,8 +34,8 @@ impl Rule {
     /// Replaces all non-overlapping matches in `input` with the provided transcriber.
     pub fn replace_all(&self, input: TokenStream) -> TokenStream {
         self.from
-            .find_all(input.clone())
-            .apply_tokens(&mut 0, &self.to, input)
+            .find_all(input.clone(), 0)
+            .apply_tokens(&mut 0, input, self)
     }
 
     /// Replaces all non-overlapping matches in input with the provided transcriber.
@@ -42,12 +43,12 @@ impl Rule {
     /// Unlike creating `TokenStream` from `str` and then calling [`Rule::replace_all`],
     /// the original string is preserved as much as possible.
     pub fn replace_all_str(&self, input: &str) -> Result<String> {
-        let input = Source::new(input, parse_str(input)?);
-        let mut b = ResultStringBuilder::new(&input);
+        let (source, input) = Source::from_str(input)?;
+        let mut b = TokenStringBuilder::new(&source);
         self.from
-            .find_all(input.tokens.clone())
-            .apply_string(&self.to, &mut b);
-        Ok(b.build())
+            .find_all(input, 0)
+            .apply_string(self, &mut FindAllStringBuilder::new(&mut b, 0));
+        Ok(b.s)
     }
 
     /// If the entire `input` matches the entire `from`, do the conversion. Otherwise, return an error.
@@ -58,6 +59,13 @@ impl Rule {
     }
     fn apply_parser(&self, input: &mut ParseStreamEx) -> Result<TokenStream> {
         let m = self.from.try_match(input)?;
-        Ok(self.to.apply_tokens(&m))
+        let mut tokens = TokenStream::new();
+        let mut b = MatchTokensBuilder {
+            tokens: &mut tokens,
+            rule: self,
+            tes_len: 0,
+        };
+        self.to.apply_tokens_to(&m, &mut b);
+        Ok(tokens)
     }
 }

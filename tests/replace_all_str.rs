@@ -2,7 +2,13 @@ use macro_rules_rt::{Matcher, Rule, Transcriber};
 use proc_macro2::TokenStream;
 use syn::{parse2, parse_str};
 
+#[track_caller]
 fn check(from: &str, to: &str, input: &str, expect: &str) {
+    check_as(from, to, input, expect, false);
+}
+
+#[track_caller]
+fn check_as(from: &str, to: &str, input: &str, expect: &str, nest: bool) {
     let msg = format!(
         "
 from  = {from},
@@ -12,16 +18,17 @@ input = {input}"
     {
         let from: Matcher = from.parse().unwrap();
         let to: Transcriber = to.parse().unwrap();
+        let to = to.nest(nest);
         let rule = Rule::new(from, to).unwrap();
         let actual = rule.replace_all_str(input).unwrap();
         assert_eq!(actual, expect, "replace_all_str str {msg}");
     }
     {
         let from: TokenStream = parse_str(from).unwrap();
-        let to: TokenStream = parse_str(to).unwrap();
-
         let from: Matcher = parse2(from).unwrap();
+        let to: TokenStream = parse_str(to).unwrap();
         let to: Transcriber = parse2(to).unwrap();
+        let to = to.nest(nest);
         let rule = Rule::new(from, to).unwrap();
         let actual = rule.replace_all_str(input).unwrap();
         assert_eq!(actual, expect, "replace_all_str tokens {msg}");
@@ -34,9 +41,13 @@ input = {input}"
 }
 
 #[test]
-fn single_line() {
+fn single_line_1() {
     check("+", "-", "1 + 2 + 3", "1 - 2 - 3");
     check("+", "-", "+2+3", "- 2 - 3");
+}
+
+#[test]
+fn single_line_2() {
     check(
         "$($e:ident)*",
         "$($e @)*",
@@ -44,6 +55,7 @@ fn single_line() {
         "1+2 a @ b @ c @ 3+4",
     );
 }
+
 #[test]
 fn var() {
     check("$x:ident", "b", "a", "b");
@@ -83,6 +95,19 @@ fn replace_middle() {
 #[test]
 fn replace_end() {
     check("+", "-", "1+", "1 -");
+}
+
+#[test]
+fn var_expr() {
+    check("$e:expr", "$e @", "1", "1 @");
+    check("$e:expr", "$e @", "1 + 2", "1 + 2 @");
+    check("$e:expr", "$e @", "(1 + 2)", "(1 + 2) @");
+    check(
+        "$e:expr",
+        "$e @",
+        "(1 + 2) + (3 + 4)",
+        "(1 + 2) + (3 + 4) @",
+    );
 }
 
 #[test]
@@ -180,4 +205,27 @@ fn rep_empty_content_and_some_sep() {
 #[test]
 fn keyword_self() {
     check("self", "this", "self", "this");
+}
+
+#[test]
+fn nest_no() {
+    check_as(
+        "a + $e:expr",
+        "a + $e + x",
+        "a + ( a + a )",
+        "a + ( a + a ) + x",
+        false,
+    );
+}
+
+#[test]
+
+fn nest_yes() {
+    check_as(
+        "a + $e:expr",
+        "a + $e + x",
+        "a + ( a + a )",
+        "a + ( a + a + x ) + x",
+        true,
+    );
 }

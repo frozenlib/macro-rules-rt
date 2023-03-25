@@ -1,8 +1,10 @@
 use crate::{
-    matcher::{MacroRepOp, MacroRepSep, PatternItems, RawMatch},
+    matcher::{
+        MacroRepOp, MacroRepSep, MatchStringBuilder, MatchTokensBuilder, PatternItems, RawMatch,
+    },
     token_entry::TokenStringBuilder,
     utils::{to_close_str, to_open_str, RangeBuilder},
-    ParseStreamEx, ResultStringBuilder, Source,
+    ParseStreamEx, Source,
 };
 use proc_macro2::{Delimiter, Group, Ident, Span, TokenStream, TokenTree};
 use quote::{ToTokens, TokenStreamExt};
@@ -11,7 +13,6 @@ use structmeta::{Parse, ToTokens};
 use syn::{
     ext::IdentExt,
     parse::{Parse, ParseStream},
-    parse_str,
     spanned::Spanned,
     token, Error, Result, Token,
 };
@@ -25,6 +26,7 @@ use syn::{
 pub struct Transcriber {
     items: TranscriberItems,
     is_ready_string: bool,
+    pub(crate) nest: bool,
 }
 
 impl Parse for Transcriber {
@@ -37,9 +39,8 @@ impl FromStr for Transcriber {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let source = Source::new(s, parse_str(s)?);
-        let tokens = source.tokens.clone();
-        let mut to = ParseStreamEx::parse_from_tokens(tokens, 0, Self::parse)?;
+        let (source, input) = Source::from_str(s)?;
+        let mut to = ParseStreamEx::parse_from_tokens(input, 0, Self::parse)?;
         to.items.ready_string(&source);
         to.is_ready_string = true;
         Ok(to)
@@ -51,19 +52,21 @@ impl Transcriber {
         Ok(Self {
             items: TranscriberItems::parse(input)?,
             is_ready_string: false,
+            nest: false,
         })
+    }
+    pub fn nest(self, yes: bool) -> Self {
+        Self { nest: yes, ..self }
     }
     pub(crate) fn attach(&mut self, p: &PatternItems) -> Result<()> {
         self.items.attach(p)
     }
-    pub(crate) fn apply_tokens(&self, m: &RawMatch) -> TokenStream {
-        self.items.apply_tokens(m)
+    pub(crate) fn apply_tokens_to(&self, m: &RawMatch, b: &mut MatchTokensBuilder) {
+        self.items.apply_tokens_to(m, b)
     }
-    pub(crate) fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
-        self.items.apply_tokens_to(m, output)
-    }
-    pub(crate) fn apply_string(&self, m: &RawMatch, b: &mut ResultStringBuilder) {
-        self.items.apply_string(self.is_ready_string, m, b)
+    pub(crate) fn apply_string(&self, m: &RawMatch, mut b: MatchStringBuilder) {
+        b.is_ready_string = self.is_ready_string;
+        self.items.apply_string(m, &mut b)
     }
 }
 
@@ -135,19 +138,14 @@ impl TranscriberItems {
         }
         None
     }
-    fn apply_tokens(&self, m: &RawMatch) -> TokenStream {
-        let mut output = TokenStream::new();
-        self.apply_tokens_to(m, &mut output);
-        output
-    }
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
+    fn apply_tokens_to(&self, m: &RawMatch, b: &mut MatchTokensBuilder) {
         for item in &self.items {
-            item.apply_tokens_to(m, output);
+            item.apply_tokens_to(m, b);
         }
     }
-    fn apply_string(&self, is_ready_string: bool, m: &RawMatch, b: &mut ResultStringBuilder) {
+    fn apply_string(&self, m: &RawMatch, b: &mut MatchStringBuilder) {
         for item in &self.items {
-            item.apply_string(is_ready_string, m, b)
+            item.apply_string(m, b)
         }
     }
 }
@@ -209,23 +207,23 @@ impl TranscriberItem {
             TranscriberItem::Rep(r) => Some(r.var.clone()),
         }
     }
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
+    fn apply_tokens_to(&self, m: &RawMatch, b: &mut MatchTokensBuilder) {
         match self {
-            TranscriberItem::Tokens(t) => t.tokens.to_tokens(output),
+            TranscriberItem::Tokens(t) => t.tokens.to_tokens(b.tokens),
             TranscriberItem::String(_) => {}
-            TranscriberItem::Group(g) => g.apply_tokens_to(m, output),
-            TranscriberItem::Var(v) => v.apply_tokens_to(m, output),
-            TranscriberItem::Rep(r) => r.apply_tokens_to(m, output),
+            TranscriberItem::Group(g) => g.apply_tokens_to(m, b),
+            TranscriberItem::Var(v) => v.apply_tokens_to(m, b),
+            TranscriberItem::Rep(r) => r.apply_tokens_to(m, b),
         }
     }
 
-    fn apply_string(&self, is_ready_string: bool, m: &RawMatch, b: &mut ResultStringBuilder) {
+    fn apply_string(&self, m: &RawMatch, b: &mut MatchStringBuilder) {
         match self {
-            TranscriberItem::Tokens(tokens) => tokens.apply_string(is_ready_string, b),
-            TranscriberItem::Group(g) => g.apply_string(is_ready_string, m, b),
+            TranscriberItem::Tokens(tokens) => tokens.apply_string(b),
+            TranscriberItem::Group(g) => g.apply_string(m, b),
             TranscriberItem::String(s) => b.b.push_str(s),
             TranscriberItem::Var(v) => v.apply_string(m, b),
-            TranscriberItem::Rep(r) => r.apply_string(is_ready_string, m, b),
+            TranscriberItem::Rep(r) => r.apply_string(m, b),
         }
     }
 }
@@ -236,8 +234,8 @@ struct TranscriberTokens {
     tes_range: Range<usize>,
 }
 impl TranscriberTokens {
-    fn apply_string(&self, is_ready_string: bool, b: &mut ResultStringBuilder) {
-        if !is_ready_string {
+    fn apply_string(&self, b: &mut MatchStringBuilder) {
+        if !b.is_ready_string {
             b.b.push_tokens(&self.tokens)
         }
     }
@@ -258,18 +256,26 @@ impl TranscriberGroup {
         tes_range.push(self.tes_range_close.clone());
     }
 
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
-        let mut g = Group::new(self.delimiter, self.content.apply_tokens(m));
+    fn apply_tokens_to(&self, m: &RawMatch, b: &mut MatchTokensBuilder) {
+        let mut stream = TokenStream::new();
+        self.content.apply_tokens_to(
+            m,
+            &mut MatchTokensBuilder {
+                tokens: &mut stream,
+                ..*b
+            },
+        );
+        let mut g = Group::new(self.delimiter, stream);
         g.set_span(self.span);
-        output.append(g);
+        b.tokens.append(g);
     }
 
-    fn apply_string(&self, is_ready_string: bool, m: &RawMatch, b: &mut ResultStringBuilder) {
-        if !is_ready_string {
+    fn apply_string(&self, m: &RawMatch, b: &mut MatchStringBuilder) {
+        if !b.is_ready_string {
             b.b.push_str(to_open_str(self.delimiter));
         }
-        self.content.apply_string(is_ready_string, m, b);
-        if !is_ready_string {
+        self.content.apply_string(m, b);
+        if !b.is_ready_string {
             b.b.push_str(to_close_str(self.delimiter));
         }
     }
@@ -309,12 +315,12 @@ impl TranscriberVar {
             bail!(span, "attempted to repeat an expression containing no syntax variables matched as repeating at this depth")
         }
     }
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
-        m.vars[self.var_index].tokens.to_tokens(output);
+    fn apply_tokens_to(&self, m: &RawMatch, b: &mut MatchTokensBuilder) {
+        m.vars[self.var_index].apply_tokens_to(b)
     }
 
-    fn apply_string(&self, m: &RawMatch, b: &mut ResultStringBuilder) {
-        b.b.push_tes(m.vars[self.var_index].tes_range.clone());
+    fn apply_string(&self, m: &RawMatch, b: &mut MatchStringBuilder) {
+        m.vars[self.var_index].apply_string(b)
     }
 }
 
@@ -369,20 +375,20 @@ impl TranscriberRep {
         bail!(self.var.span(), "attempted to repeat an expression containing no syntax variables matched as repeating at this depth")
     }
 
-    fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
+    fn apply_tokens_to(&self, m: &RawMatch, b: &mut MatchTokensBuilder) {
         let mut is_next = false;
         for m in &m.reps[self.rep_index].0 {
             if is_next {
                 if let Some(sep) = &self.sep.0 {
-                    sep.to_tokens(output);
+                    sep.to_tokens(b.tokens);
                 }
             }
             is_next = true;
-            self.content.apply_tokens_to(m, output)
+            self.content.apply_tokens_to(m, b)
         }
     }
 
-    fn apply_string(&self, is_ready_string: bool, m: &RawMatch, b: &mut ResultStringBuilder) {
+    fn apply_string(&self, m: &RawMatch, b: &mut MatchStringBuilder) {
         let mut is_next = false;
         for m in &m.reps[self.rep_index].0 {
             if is_next {
@@ -391,7 +397,7 @@ impl TranscriberRep {
                 }
             }
             is_next = true;
-            self.content.apply_string(is_ready_string, m, b)
+            self.content.apply_string(m, b)
         }
     }
 }
