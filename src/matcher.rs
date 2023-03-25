@@ -1,11 +1,12 @@
 use crate::{
     token_fragment::{
-        cts_len, CursorToken, CursorTokenTree, ParseStreamEx, ResultStringBuilder, TokenFragment,
+        cts_len, CursorToken, CursorTokenTree, LongTokenTree, ParseStreamEx, ResultStringBuilder,
+        SomeGroup, TokenFragment,
     },
-    utils::{parse_macro_stmt, to_delimiter, LongTokenTree},
+    utils::{parse_macro_stmt, to_delimiter},
     Transcriber,
 };
-use proc_macro2::{Delimiter, Group, Span, TokenStream, TokenTree};
+use proc_macro2::{Delimiter, Group, Span, TokenStream};
 use quote::{ToTokens, TokenStreamExt};
 use std::{collections::HashMap, ops::Range, str::FromStr};
 use structmeta::{Parse, ToTokens};
@@ -192,8 +193,12 @@ impl Matcher {
                     .unwrap();
                 continue;
             }
-            let tt: LongTokenTree = input.parse().unwrap();
-            tts_and_tfs_len += tt.len();
+            if let Ok(tt) = input.parse::<LongTokenTree>() {
+                tts_and_tfs_len += tt.len();
+            } else {
+                // End after non-delimiter Group
+                break;
+            }
         }
         parts.push(FindAllPart::NoMatch(FindAllPartNoMatch { tts_and_tfs_len }));
         is_match
@@ -591,9 +596,12 @@ impl MacroMatcher {
         if content.contains_var_or_rep() {
             Ok(PatternItem::Group(GroupPattern { delimiter, content }))
         } else {
-            Ok(PatternItem::Token(TokenPattern::new(LongTokenTree::Token(
-                TokenTree::Group(Group::new(delimiter, self.content.to_token_stream())),
-            ))))
+            Ok(PatternItem::Token(TokenPattern::new(
+                LongTokenTree::TokenTree(CursorTokenTree::Group(SomeGroup(Group::new(
+                    delimiter,
+                    self.content.to_token_stream(),
+                )))),
+            )))
         }
     }
 }

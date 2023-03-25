@@ -374,3 +374,9 @@ fn none_group() {
     let ts = TokenStream::from_iter(ts);
     check_eq(quote!(a), quote!(a), ts.clone(), ts);
 }
+
+#[test]
+fn none_group_empty() {
+    let ts = TokenStream::from_iter([TokenTree::Group(Group::new(Delimiter::None, quote!()))]);
+    check_eq(quote!(), quote!(), ts.clone(), ts);
+}

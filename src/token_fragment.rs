@@ -2,16 +2,99 @@ use crate::{
     text::Text,
     utils::{to_close_str, to_open_str},
 };
-use proc_macro2::{extra::DelimSpan, Delimiter, Group, LineColumn, Span, TokenStream};
+use proc_macro2::{extra::DelimSpan, Delimiter, Group, LineColumn, Span, TokenStream, TokenTree};
 use quote::ToTokens;
-use std::{fmt::Write, mem::take, ops::Range};
+use std::{
+    fmt::{Display, Formatter, Write},
+    mem::take,
+    ops::Range,
+};
 use structmeta::{Parse, ToTokens};
 use syn::{
     buffer::Cursor,
     parse::{discouraged::Speculative, Parse, ParseBuffer, ParseStream, Parser, Peek},
     spanned::Spanned,
-    Lifetime, Result,
+    Lifetime, Result, Token,
 };
+
+#[derive(Parse, ToTokens, Debug, Clone)]
+pub enum LongPunct {
+    AndAnd(Token![&&]),
+    AndEq(Token![&=]),
+    CaretEq(Token![^=]),
+    DotDot(Token![..]),
+    DotDotDot(Token![...]),
+    DotDotEq(Token![..=]),
+    EqEq(Token![==]),
+    FatArrow(Token![=>]),
+    Ge(Token![>=]),
+    LArrow(Token![<-]),
+    Le(Token![<=]),
+    MinusEq(Token![-=]),
+    Ne(Token![!=]),
+    OrEq(Token![|=]),
+    OrOr(Token![||]),
+    PathSep(Token![::]),
+    PercentEq(Token![%=]),
+    PlusEq(Token![+=]),
+    RArrow(Token![->]),
+    Shl(Token![<<]),
+    ShlEq(Token![<<=]),
+    Shr(Token![>>]),
+    ShrEq(Token![>>=]),
+    SlashEq(Token![/=]),
+    StarEq(Token![*=]),
+}
+impl LongPunct {
+    fn len(&self) -> usize {
+        match self {
+            LongPunct::AndAnd(..) => 2,
+            LongPunct::AndEq(..) => 2,
+            LongPunct::CaretEq(..) => 2,
+            LongPunct::DotDot(..) => 2,
+            LongPunct::DotDotDot(..) => 3,
+            LongPunct::DotDotEq(..) => 3,
+            LongPunct::EqEq(..) => 2,
+            LongPunct::FatArrow(..) => 2,
+            LongPunct::Ge(..) => 2,
+            LongPunct::LArrow(..) => 2,
+            LongPunct::Le(..) => 2,
+            LongPunct::MinusEq(..) => 2,
+            LongPunct::Ne(..) => 2,
+            LongPunct::OrEq(..) => 2,
+            LongPunct::OrOr(..) => 2,
+            LongPunct::PathSep(..) => 2,
+            LongPunct::PercentEq(..) => 2,
+            LongPunct::PlusEq(..) => 2,
+            LongPunct::RArrow(..) => 2,
+            LongPunct::Shl(..) => 2,
+            LongPunct::ShlEq(..) => 3,
+            LongPunct::Shr(..) => 2,
+            LongPunct::ShrEq(..) => 3,
+            LongPunct::SlashEq(..) => 2,
+            LongPunct::StarEq(..) => 2,
+        }
+    }
+}
+
+#[derive(Parse, ToTokens, Debug, Clone)]
+pub enum LongTokenTree {
+    LongPunct(LongPunct),
+    TokenTree(CursorTokenTree),
+}
+impl LongTokenTree {
+    pub fn len(&self) -> usize {
+        match self {
+            LongTokenTree::LongPunct(p) => p.len(),
+            LongTokenTree::TokenTree(_) => 1,
+        }
+    }
+}
+impl Display for LongTokenTree {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_token_stream())
+    }
+}
 
 #[derive(ToTokens, Debug, Clone)]
 pub enum CursorToken {
@@ -46,7 +129,7 @@ fn cursor_token(cursor: Cursor) -> Option<(CursorToken, Cursor)> {
 }
 
 #[derive(ToTokens, Debug, Clone)]
-pub struct SomeGroup(proc_macro2::Group);
+pub struct SomeGroup(pub proc_macro2::Group);
 
 impl Parse for SomeGroup {
     fn parse(input: ParseStream) -> Result<Self> {
@@ -156,7 +239,17 @@ impl TokenFragment {
                 continue;
             }
             if fail {
-                panic!("TokenFragmenet traverse failed");
+                if let Some((tt, next)) = cursor.token_tree() {
+                    if let TokenTree::Group(group) = &tt {
+                        if group.delimiter() == Delimiter::None && next.token_stream().is_empty() {
+                            break;
+                        }
+                    }
+                    let stream = next.token_stream();
+                    panic!("TokenFragmenet traverse failed\nstream = {stream}\ntt = {tt:?}");
+                } else {
+                    break;
+                }
             }
             fail = true;
         }
