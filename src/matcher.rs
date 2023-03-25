@@ -193,8 +193,8 @@ impl Matcher {
                     .unwrap();
                 continue;
             }
-            if let Ok(tt) = input.parse::<LongToken>() {
-                tts_and_tes_len += tt.len();
+            if let Ok(t) = input.parse::<LongToken>() {
+                tts_and_tes_len += t.len();
             } else {
                 // End after non-delimiter Group
                 break;
