@@ -1,6 +1,6 @@
 use crate::{
     matcher::{MacroRepOp, MacroRepSep, PatternItems, RawMatch},
-    token_fragment::TokenStringBuilder,
+    token_entry::TokenStringBuilder,
     utils::{to_close_str, to_open_str, RangeBuilder},
     ParseStreamEx, ResultStringBuilder, Source,
 };
@@ -76,16 +76,16 @@ impl TranscriberItems {
     fn parse(input: &mut ParseStreamEx) -> Result<Self> {
         let mut items = Vec::new();
         let mut tokens = Vec::new();
-        let mut tfs_range = RangeBuilder::new();
+        let mut tes_range = RangeBuilder::new();
         while !input.is_empty() {
             if input.peek(token::Paren) || input.peek(token::Brace) || input.peek(token::Bracket) {
-                push_tokens(&mut tokens, &mut items, &mut tfs_range);
+                push_tokens(&mut tokens, &mut items, &mut tes_range);
                 let g = input.parse_group(|g, input| {
                     Ok(TranscriberGroup {
                         delimiter: g.group.delimiter(),
                         content: Self::parse(input)?,
-                        tfs_range_open: g.tfs_range_open,
-                        tfs_range_close: g.tfs_range_close,
+                        tes_range_open: g.tes_range_open,
+                        tes_range_close: g.tes_range_close,
                         span: g.group.span(),
                     })
                 })?;
@@ -94,31 +94,31 @@ impl TranscriberItems {
             }
             if input.peek(Token![$]) {
                 if input.peek2(Ident::peek_any) {
-                    push_tokens(&mut tokens, &mut items, &mut tfs_range);
+                    push_tokens(&mut tokens, &mut items, &mut tes_range);
                     items.push(TranscriberItem::Var(input.parse()?));
                     continue;
                 }
                 if input.peek2(token::Paren) {
-                    push_tokens(&mut tokens, &mut items, &mut tfs_range);
+                    push_tokens(&mut tokens, &mut items, &mut tes_range);
                     items.push(TranscriberItem::Rep(TranscriberRep::parse(input)?));
                     continue;
                 }
             }
-            let tfs_start = input.tfs_offset;
+            let tes_start = input.tes_offset;
             let token: TokenTree = input.parse().unwrap();
-            let tfs_end = input.tfs_offset;
-            tfs_range.push(tfs_start..tfs_end);
+            let tes_end = input.tes_offset;
+            tes_range.push(tes_start..tes_end);
             tokens.push(token);
         }
-        push_tokens(&mut tokens, &mut items, &mut tfs_range);
+        push_tokens(&mut tokens, &mut items, &mut tes_range);
         Ok(Self { items })
     }
     fn ready_string(&mut self, source: &Source) {
         self.ready_string_with(source, &mut RangeBuilder::new());
     }
-    fn ready_string_with(&mut self, source: &Source, tfs_range: &mut RangeBuilder) {
+    fn ready_string_with(&mut self, source: &Source, tes_range: &mut RangeBuilder) {
         for item in &mut self.items {
-            item.ready_string_with(source, tfs_range);
+            item.ready_string_with(source, tes_range);
         }
     }
     fn attach(&mut self, p: &PatternItems) -> Result<()> {
@@ -154,14 +154,14 @@ impl TranscriberItems {
 fn push_tokens(
     tokens: &mut Vec<TokenTree>,
     items: &mut Vec<TranscriberItem>,
-    tfs_range: &mut RangeBuilder,
+    tes_range: &mut RangeBuilder,
 ) {
-    if let Some(tfs_range) = tfs_range.take() {
+    if let Some(tes_range) = tes_range.take() {
         if !tokens.is_empty() {
             let tokens = TokenStream::from_iter(tokens.drain(..));
             items.push(TranscriberItem::Tokens(TranscriberTokens {
                 tokens,
-                tfs_range,
+                tes_range,
             }));
         }
     }
@@ -177,14 +177,14 @@ enum TranscriberItem {
     Rep(TranscriberRep),
 }
 impl TranscriberItem {
-    fn ready_string_with(&mut self, source: &Source, tfs_range: &mut RangeBuilder) {
+    fn ready_string_with(&mut self, source: &Source, tes_range: &mut RangeBuilder) {
         match self {
-            Self::Tokens(t) => tfs_range.push(t.tfs_range.clone()),
-            Self::Group(g) => g.ready_string_with(source, tfs_range),
+            Self::Tokens(t) => tes_range.push(t.tes_range.clone()),
+            Self::Group(g) => g.ready_string_with(source, tes_range),
             Self::String(ref mut s) => {
-                if let Some(tfs_range) = tfs_range.take() {
+                if let Some(tes_range) = tes_range.take() {
                     let mut b = TokenStringBuilder::new(source);
-                    b.push_tfs(tfs_range);
+                    b.push_tes(tes_range);
                     *s = b.s;
                 }
             }
@@ -233,7 +233,7 @@ impl TranscriberItem {
 #[derive(Debug)]
 struct TranscriberTokens {
     tokens: TokenStream,
-    tfs_range: Range<usize>,
+    tes_range: Range<usize>,
 }
 impl TranscriberTokens {
     fn apply_string(&self, is_ready_string: bool, b: &mut ResultStringBuilder) {
@@ -248,14 +248,14 @@ struct TranscriberGroup {
     delimiter: Delimiter,
     content: TranscriberItems,
     span: Span,
-    tfs_range_open: Range<usize>,
-    tfs_range_close: Range<usize>,
+    tes_range_open: Range<usize>,
+    tes_range_close: Range<usize>,
 }
 impl TranscriberGroup {
-    fn ready_string_with(&mut self, source: &Source, tfs_range: &mut RangeBuilder) {
-        tfs_range.push(self.tfs_range_open.clone());
-        self.content.ready_string_with(source, tfs_range);
-        tfs_range.push(self.tfs_range_close.clone());
+    fn ready_string_with(&mut self, source: &Source, tes_range: &mut RangeBuilder) {
+        tes_range.push(self.tes_range_open.clone());
+        self.content.ready_string_with(source, tes_range);
+        tes_range.push(self.tes_range_close.clone());
     }
 
     fn apply_tokens_to(&self, m: &RawMatch, output: &mut TokenStream) {
@@ -314,7 +314,7 @@ impl TranscriberVar {
     }
 
     fn apply_string(&self, m: &RawMatch, b: &mut ResultStringBuilder) {
-        b.b.push_tfs(m.vars[self.var_index].tfs_range.clone());
+        b.b.push_tes(m.vars[self.var_index].tes_range.clone());
     }
 }
 

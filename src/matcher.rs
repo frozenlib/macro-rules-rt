@@ -1,7 +1,7 @@
 use crate::{
-    token_fragment::{
+    token_entry::{
         cts_len, CursorToken, CursorTokenTree, LongToken, LongTokenTree, ParseStreamEx,
-        ResultStringBuilder, TokenFragment,
+        ResultStringBuilder, TokenEntry,
     },
     utils::{parse_macro_stmt, to_delimiter},
     Transcriber,
@@ -71,7 +71,7 @@ impl FindAllParts {
     pub(crate) fn apply_string(&self, to: &Transcriber, b: &mut ResultStringBuilder) {
         for p in &self.0 {
             match p {
-                FindAllPart::NoMatch(p) => b.push_no_match(p.tts_and_tfs_len),
+                FindAllPart::NoMatch(p) => b.push_no_match(p.tts_and_tes_len),
                 FindAllPart::Match(p) => p.apply_string(to, b),
                 FindAllPart::GroupOpen | FindAllPart::GroupClose => b.push_no_match(1),
             }
@@ -89,11 +89,11 @@ enum FindAllPart {
 
 #[derive(Debug)]
 struct FindAllPartNoMatch {
-    tts_and_tfs_len: usize,
+    tts_and_tes_len: usize,
 }
 impl FindAllPartNoMatch {
     fn apply_tokens_to(&self, input: ParseStream, output: &mut TokenStream) {
-        for _ in 0..self.tts_and_tfs_len {
+        for _ in 0..self.tts_and_tes_len {
             let t: CursorToken = input.parse().unwrap();
             t.to_tokens(output);
         }
@@ -104,7 +104,7 @@ impl FindAllPartNoMatch {
 struct FindAllPartMatch {
     m: RawMatch,
     cts_len: usize,
-    tfs_len: usize,
+    tes_len: usize,
 }
 impl FindAllPartMatch {
     fn apply_tokens_to(&self, input: ParseStream, to: &Transcriber, output: &mut TokenStream) {
@@ -114,7 +114,7 @@ impl FindAllPartMatch {
         to.apply_tokens_to(&self.m, output)
     }
     fn apply_string(&self, to: &Transcriber, b: &mut ResultStringBuilder) {
-        b.commit_no_match(self.tfs_len);
+        b.commit_no_match(self.tes_len);
         to.apply_string(&self.m, b);
     }
 }
@@ -162,20 +162,20 @@ impl Matcher {
         input: &mut ParseStreamEx,
         parts: &mut Vec<FindAllPart>,
     ) -> bool {
-        let mut tts_and_tfs_len = 0;
+        let mut tts_and_tes_len = 0;
         let mut is_match = false;
         while !input.is_empty() {
             let mut fork = input.fork();
             if let Ok(m) = self.try_match(&mut fork) {
                 if !m.is_empty {
-                    parts.push(FindAllPart::NoMatch(FindAllPartNoMatch { tts_and_tfs_len }));
+                    parts.push(FindAllPart::NoMatch(FindAllPartNoMatch { tts_and_tes_len }));
                     parts.push(FindAllPart::Match(match_part(
                         m,
                         input.cursor(),
                         fork.cursor(),
                     )));
                     input.advance_to(&fork);
-                    tts_and_tfs_len = 0;
+                    tts_and_tes_len = 0;
                     is_match = true;
                     continue;
                 }
@@ -183,24 +183,24 @@ impl Matcher {
             if input.peek(token::Paren) || input.peek(token::Brace) || input.peek(token::Bracket) {
                 input
                     .parse_group(|_, input| {
-                        parts.push(FindAllPart::NoMatch(FindAllPartNoMatch { tts_and_tfs_len }));
+                        parts.push(FindAllPart::NoMatch(FindAllPartNoMatch { tts_and_tes_len }));
                         parts.push(FindAllPart::GroupOpen);
                         is_match |= self.find_all_parts_parser(input, parts);
                         parts.push(FindAllPart::GroupClose);
-                        tts_and_tfs_len = 0;
+                        tts_and_tes_len = 0;
                         Ok(())
                     })
                     .unwrap();
                 continue;
             }
             if let Ok(tt) = input.parse::<LongToken>() {
-                tts_and_tfs_len += tt.len();
+                tts_and_tes_len += tt.len();
             } else {
                 // End after non-delimiter Group
                 break;
             }
         }
-        parts.push(FindAllPart::NoMatch(FindAllPartNoMatch { tts_and_tfs_len }));
+        parts.push(FindAllPart::NoMatch(FindAllPartNoMatch { tts_and_tes_len }));
         is_match
     }
 }
@@ -208,7 +208,7 @@ fn match_part(m: RawMatch, start: Cursor, end: Cursor) -> FindAllPartMatch {
     FindAllPartMatch {
         m,
         cts_len: cts_len(start, end),
-        tfs_len: TokenFragment::len_from_cursor(start, end),
+        tes_len: TokenEntry::len_from_cursor(start, end),
     }
 }
 
@@ -296,12 +296,12 @@ impl PatternItem {
             PatternItem::Token(t) => t.try_match_to(input, m),
             PatternItem::Group(g) => g.try_match_to(input, m),
             PatternItem::Var(v) => {
-                let tfs_start = input.tfs_offset;
+                let tes_start = input.tes_offset;
                 let tokens = input.parse_with(|input| v.try_match(input))?;
-                let tfs_end = input.tfs_offset;
+                let tes_end = input.tes_offset;
                 m.vars.push(MatchVar {
                     tokens,
-                    tfs_range: tfs_start..tfs_end,
+                    tes_range: tes_start..tes_end,
                 });
                 m.is_empty = false;
                 Ok(())
@@ -673,7 +673,7 @@ impl RawMatch {
 #[derive(Debug)]
 pub struct MatchVar {
     pub tokens: TokenStream,
-    pub tfs_range: Range<usize>,
+    pub tes_range: Range<usize>,
 }
 
 #[derive(Debug)]

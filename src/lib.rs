@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 use syn::{parse_str, Result};
-use token_fragment::{ParseStreamEx, ResultStringBuilder, Source};
+use token_entry::{ParseStreamEx, ResultStringBuilder, Source};
 
 pub use matcher::Matcher;
 pub use transcriber::Transcriber;
@@ -12,7 +12,7 @@ mod utils;
 
 mod matcher;
 mod text;
-mod token_fragment;
+mod token_entry;
 mod transcriber;
 
 /// Pair [`Matcher`] and [`Transcriber`].

@@ -191,25 +191,25 @@ pub enum LongTokenTree {
 }
 
 #[derive(Debug, Clone)]
-pub enum TokenFragment {
+pub enum TokenEntry {
     Token(CursorToken),
     GroupOpen { span: Span, delimiter: Delimiter },
     GroupClose { span: Span, delimiter: Delimiter },
 }
-impl TokenFragment {
+impl TokenEntry {
     pub fn span(&self) -> Span {
         match self {
-            TokenFragment::Token(t) => t.span(),
-            TokenFragment::GroupOpen { span, .. } => *span,
-            TokenFragment::GroupClose { span, .. } => *span,
+            TokenEntry::Token(t) => t.span(),
+            TokenEntry::GroupOpen { span, .. } => *span,
+            TokenEntry::GroupClose { span, .. } => *span,
         }
     }
     pub fn build(tokens: TokenStream) -> Vec<Self> {
         let mut items = Vec::new();
-        TokenFragment::for_each_tokens(tokens, &mut |t| items.push(t.clone()));
+        TokenEntry::for_each_tokens(tokens, &mut |t| items.push(t.clone()));
         items
     }
-    pub fn for_each_tokens(tokens: TokenStream, f: &mut impl FnMut(&TokenFragment)) {
+    pub fn for_each_tokens(tokens: TokenStream, f: &mut impl FnMut(&TokenEntry)) {
         (|input: ParseStream| {
             input.step(|cursor| Ok(((), Self::for_each_cursor(*cursor, None, f))))
         })
@@ -219,25 +219,25 @@ impl TokenFragment {
     pub fn for_each_cursor<'a>(
         start: Cursor<'a>,
         end: Option<Cursor<'a>>,
-        f: &mut impl FnMut(&TokenFragment),
+        f: &mut impl FnMut(&TokenEntry),
     ) -> Cursor<'a> {
         let mut cursor = start;
         let mut fail = false;
         while !cursor.eof() && Some(cursor) != end {
             if let Some((token, next)) = cursor_token(cursor) {
                 fail = false;
-                f(&TokenFragment::Token(token));
+                f(&TokenEntry::Token(token));
                 cursor = next;
                 continue;
             }
             if let Some((inner, delimiter, delim_span, next)) = some_group(cursor) {
                 fail = false;
-                f(&TokenFragment::GroupOpen {
+                f(&TokenEntry::GroupOpen {
                     span: delim_span.open(),
                     delimiter,
                 });
                 Self::for_each_cursor(inner, None, f);
-                f(&TokenFragment::GroupClose {
+                f(&TokenEntry::GroupClose {
                     span: delim_span.close(),
                     delimiter,
                 });
@@ -270,8 +270,8 @@ impl TokenFragment {
 
 pub struct GroupEx {
     pub group: Group,
-    pub tfs_range_open: Range<usize>,
-    pub tfs_range_close: Range<usize>,
+    pub tes_range_open: Range<usize>,
+    pub tes_range_close: Range<usize>,
 }
 
 enum CowParseBuffer<'a> {
@@ -290,13 +290,13 @@ impl<'a> std::ops::Deref for CowParseBuffer<'a> {
 
 pub struct ParseStreamEx<'a> {
     input: CowParseBuffer<'a>,
-    pub tfs_offset: usize,
+    pub tes_offset: usize,
 }
 impl<'a> ParseStreamEx<'a> {
-    pub fn new(input: ParseStream<'a>, tfs_offset: usize) -> Self {
+    pub fn new(input: ParseStream<'a>, tes_offset: usize) -> Self {
         Self {
             input: CowParseBuffer::Borrowed(input),
-            tfs_offset,
+            tes_offset,
         }
     }
     pub fn parse<T: Parse>(&mut self) -> Result<T> {
@@ -305,7 +305,7 @@ impl<'a> ParseStreamEx<'a> {
     pub fn parse_with<T>(&mut self, parser: impl FnOnce(ParseStream) -> Result<T>) -> Result<T> {
         let mut fork = self.input.fork();
         let value = parser(&mut fork)?;
-        self.tfs_offset += TokenFragment::len_from_cursor(self.input.cursor(), fork.cursor());
+        self.tes_offset += TokenEntry::len_from_cursor(self.input.cursor(), fork.cursor());
         self.input.advance_to(&fork);
         Ok(value)
     }
@@ -313,22 +313,22 @@ impl<'a> ParseStreamEx<'a> {
         &mut self,
         f: impl FnOnce(GroupEx, &mut ParseStreamEx) -> Result<T>,
     ) -> Result<T> {
-        let tfs_range_open = self.tfs_offset..self.tfs_offset + 1;
-        let tfs_offset = self.tfs_offset + 1;
+        let tes_range_open = self.tes_offset..self.tes_offset + 1;
+        let tes_offset = self.tes_offset + 1;
         let group = self.parse()?;
-        let tfs_range_close = self.tfs_offset - 1..self.tfs_offset;
+        let tes_range_close = self.tes_offset - 1..self.tes_offset;
         let g = GroupEx {
             group,
-            tfs_range_open,
-            tfs_range_close,
+            tes_range_open,
+            tes_range_close,
         };
         let tokens = g.group.stream();
-        Self::parse_from_tokens(tokens, tfs_offset, |input| f(g, input))
+        Self::parse_from_tokens(tokens, tes_offset, |input| f(g, input))
     }
     pub fn fork(&self) -> Self {
         Self {
             input: CowParseBuffer::Owned(self.input.fork()),
-            tfs_offset: self.tfs_offset,
+            tes_offset: self.tes_offset,
         }
     }
 
@@ -359,14 +359,14 @@ impl<'a> ParseStreamEx<'a> {
 
     pub fn parse_from_tokens<T>(
         tokens: TokenStream,
-        tfs_offset: usize,
+        tes_offset: usize,
         f: impl FnOnce(&mut ParseStreamEx) -> Result<T>,
     ) -> Result<T> {
-        (|input: ParseStream| f(&mut ParseStreamEx::new(input, tfs_offset))).parse2(tokens)
+        (|input: ParseStream| f(&mut ParseStreamEx::new(input, tes_offset))).parse2(tokens)
     }
 
     pub fn advance_to(&mut self, fork: &ParseStreamEx) {
-        self.tfs_offset = fork.tfs_offset;
+        self.tes_offset = fork.tes_offset;
         self.input.advance_to(&fork.input);
     }
 }
@@ -375,11 +375,11 @@ impl<'a> ParseStreamEx<'a> {
 struct TokenOffsets(Vec<Option<usize>>);
 
 impl TokenOffsets {
-    fn new(tfs: &[TokenFragment], text: &Text) -> Self {
+    fn new(tes: &[TokenEntry], text: &Text) -> Self {
         let mut items = Vec::new();
         let mut end_lc = LineColumn { line: 1, column: 0 };
         let mut end = 0;
-        for tf in tfs {
+        for tf in tes {
             let span = tf.span();
             let start_lc = span.start();
             let start = text.offset_of(start_lc);
@@ -406,24 +406,24 @@ impl TokenOffsets {
 pub struct Source<'a> {
     text: Text<'a>,
     pub tokens: TokenStream,
-    tfs: Vec<TokenFragment>,
+    tes: Vec<TokenEntry>,
     offsets: TokenOffsets,
 }
 
 impl<'a> Source<'a> {
     pub fn new(str: &'a str, tokens: TokenStream) -> Self {
         let text = Text::new(str);
-        let tfs = TokenFragment::build(tokens.clone());
-        let offsets = TokenOffsets::new(&tfs, &text);
+        let tes = TokenEntry::build(tokens.clone());
+        let offsets = TokenOffsets::new(&tes, &text);
         Self {
             text,
-            tfs,
+            tes,
             tokens,
             offsets,
         }
     }
 
-    fn get(&self, range: Range<usize>) -> (&[TokenFragment], &str, &[TokenFragment]) {
+    fn get(&self, range: Range<usize>) -> (&[TokenEntry], &str, &[TokenEntry]) {
         let mut start = range.start;
         let mut end = range.end;
         let mut start_offset = None;
@@ -447,7 +447,7 @@ impl<'a> Source<'a> {
         } else {
             ""
         };
-        (&self.tfs[range.start..start], s, &self.tfs[end..range.end])
+        (&self.tes[range.start..start], s, &self.tes[end..range.end])
     }
 }
 
@@ -463,22 +463,22 @@ impl<'a> TokenStringBuilder<'a> {
             s: String::new(),
         }
     }
-    pub fn push_tfs(&mut self, tfs_range: Range<usize>) {
-        let (fs0, s, fs1) = self.input.get(tfs_range);
+    pub fn push_tes(&mut self, tes_range: Range<usize>) {
+        let (fs0, s, fs1) = self.input.get(tes_range);
         self.push_tokens_by(fs0);
         self.push_str(s);
         self.push_tokens_by(fs1);
     }
-    fn push_tokens_by(&mut self, fs: &[TokenFragment]) {
+    fn push_tokens_by(&mut self, fs: &[TokenEntry]) {
         let mut ts = TokenStream::new();
         for f in fs {
             match f {
-                TokenFragment::Token(t) => t.to_tokens(&mut ts),
-                TokenFragment::GroupOpen { delimiter, .. } => {
+                TokenEntry::Token(t) => t.to_tokens(&mut ts),
+                TokenEntry::GroupOpen { delimiter, .. } => {
                     self.push_tokens(&take(&mut ts));
                     self.push_str(to_open_str(*delimiter));
                 }
-                TokenFragment::GroupClose { delimiter, .. } => {
+                TokenEntry::GroupClose { delimiter, .. } => {
                     self.push_tokens(&take(&mut ts));
                     self.push_str(to_close_str(*delimiter));
                 }
@@ -526,12 +526,12 @@ impl<'a> ResultStringBuilder<'a> {
             no_match_end: 0,
         }
     }
-    pub fn push_no_match(&mut self, tfs_len: usize) {
-        self.no_match_end += tfs_len;
+    pub fn push_no_match(&mut self, tes_len: usize) {
+        self.no_match_end += tes_len;
     }
-    pub fn commit_no_match(&mut self, tfs_len: usize) {
-        self.b.push_tfs(self.no_match_start..self.no_match_end);
-        self.no_match_end += tfs_len;
+    pub fn commit_no_match(&mut self, tes_len: usize) {
+        self.b.push_tes(self.no_match_start..self.no_match_end);
+        self.no_match_end += tes_len;
         self.no_match_start = self.no_match_end;
     }
     pub fn build(mut self) -> String {
