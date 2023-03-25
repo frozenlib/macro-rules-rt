@@ -153,3 +153,8 @@ fn repeat_separator_joint() {
 fn rep_empty_content_and_some_sep() {
     check("$(),*", "@", ",,", "@");
 }
+
+#[test]
+fn keyword_self() {
+    check("self", "this", "self", "this");
+}
