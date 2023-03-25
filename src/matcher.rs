@@ -1,7 +1,7 @@
 use crate::{
     token_fragment::{
-        cts_len, CursorToken, CursorTokenTree, LongTokenTree, ParseStreamEx, ResultStringBuilder,
-        SomeGroup, TokenFragment,
+        cts_len, CursorToken, CursorTokenTree, LongToken, LongTokenTree, ParseStreamEx,
+        ResultStringBuilder, TokenFragment,
     },
     utils::{parse_macro_stmt, to_delimiter},
     Transcriber,
@@ -193,7 +193,7 @@ impl Matcher {
                     .unwrap();
                 continue;
             }
-            if let Ok(tt) = input.parse::<LongTokenTree>() {
+            if let Ok(tt) = input.parse::<LongToken>() {
                 tts_and_tfs_len += tt.len();
             } else {
                 // End after non-delimiter Group
@@ -239,9 +239,6 @@ impl PatternItems {
             var_count: var_index,
             rep_count: rep_index,
         })
-    }
-    fn contains_var_or_rep(&self) -> bool {
-        self.items.iter().any(|i| i.contains_var_or_rep())
     }
     pub fn find_rep(&self, name: &str) -> Option<&RepPattern> {
         if let Some(PatternItem::Rep(r)) = self.find_item(name) {
@@ -294,15 +291,6 @@ enum PatternItem {
     Rep(RepPattern),
 }
 impl PatternItem {
-    fn contains_var_or_rep(&self) -> bool {
-        match self {
-            Self::Token(_) => false,
-            Self::Group(g) => g.content.contains_var_or_rep(),
-            Self::Var(_) => true,
-            Self::Rep(_) => true,
-        }
-    }
-
     fn try_match(&self, input: &mut ParseStreamEx, m: &mut RawMatch) -> Result<()> {
         match self {
             PatternItem::Token(t) => t.try_match_to(input, m),
@@ -334,11 +322,11 @@ struct TokenPattern {
 }
 
 impl TokenPattern {
-    fn new(tt: LongTokenTree) -> Self {
+    fn new(tt: LongToken) -> Self {
         let s = tt.to_string();
         Self { s }
     }
-    fn eq_token(&self, tt: &LongTokenTree) -> bool {
+    fn eq_token(&self, tt: &LongToken) -> bool {
         self.s == tt.to_string()
     }
     fn try_match_to(&self, input: &mut ParseStreamEx, m: &mut RawMatch) -> Result<()> {
@@ -551,7 +539,7 @@ impl MacroMatches {
 
 #[derive(ToTokens)]
 enum MacroMatch {
-    Token(LongTokenTree),
+    Token(LongToken),
     Matcher(MacroMatcher),
     Var(MacroVar),
     Rep(MacroRep),
@@ -593,16 +581,7 @@ impl MacroMatcher {
     fn to_pattern(&self) -> Result<PatternItem> {
         let delimiter = to_delimiter(&self.delimiter);
         let content = self.content.to_pattern()?;
-        if content.contains_var_or_rep() {
-            Ok(PatternItem::Group(GroupPattern { delimiter, content }))
-        } else {
-            Ok(PatternItem::Token(TokenPattern::new(
-                LongTokenTree::TokenTree(CursorTokenTree::Group(SomeGroup(Group::new(
-                    delimiter,
-                    self.content.to_token_stream(),
-                )))),
-            )))
-        }
+        Ok(PatternItem::Group(GroupPattern { delimiter, content }))
     }
 }
 
@@ -721,7 +700,7 @@ impl MacroRep {
     }
 }
 #[derive(ToTokens, Debug)]
-pub struct MacroRepSep(pub Option<LongTokenTree>);
+pub struct MacroRepSep(pub Option<LongToken>);
 
 impl Parse for MacroRepSep {
     fn parse(input: ParseStream) -> Result<Self> {

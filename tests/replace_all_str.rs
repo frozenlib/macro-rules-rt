@@ -98,6 +98,10 @@ fn doc_comment_no_panic() {
 fn doc_comment_save() {
     check("a", "a", "/// xxx\nstruct X;", "/// xxx\nstruct X;");
 }
+#[test]
+fn doc_comment_attr() {
+    check("doc =", "xxx =", "/// abc", "# [ xxx = \" abc\" ]");
+}
 
 #[test]
 fn group() {

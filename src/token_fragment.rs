@@ -78,22 +78,28 @@ impl LongPunct {
 }
 
 #[derive(Parse, ToTokens, Debug, Clone)]
-pub enum LongTokenTree {
+pub enum LongToken {
     LongPunct(LongPunct),
-    TokenTree(CursorTokenTree),
+    TokenTree(CursorToken),
 }
-impl LongTokenTree {
+impl LongToken {
     pub fn len(&self) -> usize {
         match self {
-            LongTokenTree::LongPunct(p) => p.len(),
-            LongTokenTree::TokenTree(_) => 1,
+            LongToken::LongPunct(p) => p.len(),
+            LongToken::TokenTree(_) => 1,
         }
     }
 }
-impl Display for LongTokenTree {
+impl Display for LongToken {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_token_stream())
     }
+}
+
+#[derive(Parse, ToTokens, Debug, Clone)]
+pub enum LongTokenTree {
+    Token(LongToken),
+    Group(SomeGroup),
 }
 
 #[derive(ToTokens, Debug, Clone)]
