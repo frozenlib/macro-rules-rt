@@ -211,9 +211,9 @@ fn keyword_self() {
 fn nest_no() {
     check_as(
         "a + $e:expr",
-        "a + $e + x",
-        "a + ( a + a )",
-        "a + ( a + a ) + x",
+        "b + $e",
+        "a + ( a + x )",
+        "b + ( a + x )",
         false,
     );
 }
@@ -223,9 +223,9 @@ fn nest_no() {
 fn nest_yes() {
     check_as(
         "a + $e:expr",
-        "a + $e + x",
-        "a + ( a + a )",
-        "a + ( a + a + x ) + x",
+        "b + $e",
+        "a + ( a + x )",
+        "b + ( b + x )",
         true,
     );
 }
