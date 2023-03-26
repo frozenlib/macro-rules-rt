@@ -17,6 +17,7 @@ mod token_entry;
 mod transcriber;
 
 /// Pair [`Matcher`] and [`Transcriber`].
+#[derive(Clone, Debug)]
 pub struct Rule {
     from: Matcher,
     to: Transcriber,

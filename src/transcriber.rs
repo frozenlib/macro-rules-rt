@@ -22,7 +22,7 @@ use syn::{
 /// `Transcriber` corresponds to `MacroTranscriber` (excluding outermost brace) in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
 ///
 /// A `Transcriber` created using [`FromStr::from_str`] preserves whitespace in the original string as much as possible.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Transcriber {
     items: TranscriberItems,
     is_ready_string: bool,
@@ -70,7 +70,7 @@ impl Transcriber {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct TranscriberItems {
     items: Vec<TranscriberItem>,
 }
@@ -166,7 +166,7 @@ fn push_tokens(
     items.push(TranscriberItem::String(String::new()));
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TranscriberItem {
     Tokens(TranscriberTokens),
     Group(TranscriberGroup),
@@ -228,7 +228,7 @@ impl TranscriberItem {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct TranscriberTokens {
     tokens: TokenStream,
     tes_range: Range<usize>,
@@ -241,7 +241,7 @@ impl TranscriberTokens {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct TranscriberGroup {
     delimiter: Delimiter,
     content: TranscriberItems,
@@ -287,7 +287,7 @@ struct MacroTranscriberVar {
     name: Ident,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct TranscriberVar {
     var: MacroTranscriberVar,
     var_index: usize,
@@ -324,7 +324,7 @@ impl TranscriberVar {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct TranscriberRep {
     content: TranscriberItems,
     sep: MacroRepSep,

@@ -8,7 +8,7 @@ use crate::{
 };
 use proc_macro2::{Delimiter, Group, Span, TokenStream};
 use quote::{ToTokens, TokenStreamExt};
-use std::{collections::HashMap, ops::Range, str::FromStr};
+use std::{collections::HashMap, ops::Range, rc::Rc, str::FromStr};
 use structmeta::{Parse, ToTokens};
 use syn::{
     buffer::Cursor,
@@ -138,12 +138,12 @@ impl FindAllPartMatch {
 /// Search pattern.
 ///
 /// `Matcher` corresponds to `MacroMatch*` (excluding outermost brace) in [`Macros By Example`](https://doc.rust-lang.org/reference/macros-by-example.html).
-#[derive(Debug)]
-pub struct Matcher(pub(crate) PatternItems);
+#[derive(Debug, Clone)]
+pub struct Matcher(pub(crate) Rc<PatternItems>);
 
 impl Parse for Matcher {
     fn parse(input: ParseStream) -> Result<Self> {
-        Ok(Self(input.parse::<MacroMatches>()?.to_pattern()?))
+        Ok(Self(Rc::new(input.parse::<MacroMatches>()?.to_pattern()?)))
     }
 }
 impl FromStr for Matcher {
@@ -748,7 +748,7 @@ impl MacroRep {
         })
     }
 }
-#[derive(ToTokens, Debug)]
+#[derive(ToTokens, Debug, Clone)]
 pub struct MacroRepSep(pub Option<LongToken>);
 
 impl Parse for MacroRepSep {
