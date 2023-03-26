@@ -37,6 +37,24 @@ impl Rule {
         })
     }
     /// Specifies whether to apply replacements to metavariable matches. (default is false.)
+    ///
+    /// If false, only the outermost matched range is replaced.
+    ///
+    /// If true, further substitutions are made for the range matched by meta-variables such as `$e:expr`.
+    ///
+    /// ```rust
+    /// use macro_rules_rt::Rule;
+    ///
+    /// let from = "a + $e:expr".parse()?;
+    /// let to   = "b + $e".parse()?;
+    /// let input = "a + a + x";
+    /// let rule = Rule::new(from, to)?;
+    /// let r_nest_no = rule.clone().replace_all_str(input)?;
+    /// let r_nest_yes = rule.nest(true).replace_all_str(input)?;
+    /// assert_eq!(r_nest_no,  "b + a + x");
+    /// assert_eq!(r_nest_yes, "b + b + x");
+    /// # Ok::<(), syn::Error>(())
+    /// ```
     pub fn nest(self, yes: bool) -> Self {
         Self { nest: yes, ..self }
     }
