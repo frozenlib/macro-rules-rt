@@ -36,6 +36,7 @@ impl Rule {
             nest: false,
         })
     }
+    /// Specifies whether to apply replacements to metavariable matches. (default is false.)
     pub fn nest(self, yes: bool) -> Self {
         Self { nest: yes, ..self }
     }
