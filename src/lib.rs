@@ -21,6 +21,7 @@ mod transcriber;
 pub struct Rule {
     from: Matcher,
     to: Transcriber,
+    nest: bool,
 }
 
 impl Rule {
@@ -29,7 +30,14 @@ impl Rule {
     /// Returns an error if the meta-variables of `Matcher` and `Transcriber` do not match.
     pub fn new(from: Matcher, mut to: Transcriber) -> Result<Self> {
         to.attach(&from.0)?;
-        Ok(Rule { from, to })
+        Ok(Rule {
+            from,
+            to,
+            nest: false,
+        })
+    }
+    pub fn nest(self, yes: bool) -> Self {
+        Self { nest: yes, ..self }
     }
 
     /// Replaces all non-overlapping matches in `input` with the provided transcriber.

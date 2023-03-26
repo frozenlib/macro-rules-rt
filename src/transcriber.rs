@@ -26,7 +26,6 @@ use syn::{
 pub struct Transcriber {
     items: TranscriberItems,
     is_ready_string: bool,
-    pub(crate) nest: bool,
 }
 
 impl Parse for Transcriber {
@@ -52,11 +51,7 @@ impl Transcriber {
         Ok(Self {
             items: TranscriberItems::parse(input)?,
             is_ready_string: false,
-            nest: false,
         })
-    }
-    pub fn nest(self, yes: bool) -> Self {
-        Self { nest: yes, ..self }
     }
     pub(crate) fn attach(&mut self, p: &PatternItems) -> Result<()> {
         self.items.attach(p)

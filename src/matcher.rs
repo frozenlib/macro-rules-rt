@@ -717,7 +717,7 @@ impl MatchVar {
     }
     fn try_find_all(&self, rule: &Rule, tes_len: usize) -> Option<FindAllParts> {
         let tes_range = self.tes_range.clone();
-        if tes_range.end - tes_range.start < tes_len && rule.to.nest {
+        if tes_range.end - tes_range.start < tes_len && rule.nest {
             Some(rule.from.find_all(self.tokens.clone(), tes_range.start))
         } else {
             None

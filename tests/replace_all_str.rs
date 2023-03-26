@@ -18,8 +18,8 @@ input = {input}"
     {
         let from: Matcher = from.parse().unwrap();
         let to: Transcriber = to.parse().unwrap();
-        let to = to.nest(nest);
         let rule = Rule::new(from, to).unwrap();
+        let rule = rule.nest(nest);
         let actual = rule.replace_all_str(input).unwrap();
         assert_eq!(actual, expect, "replace_all_str str {msg}");
     }
@@ -28,8 +28,8 @@ input = {input}"
         let from: Matcher = parse2(from).unwrap();
         let to: TokenStream = parse_str(to).unwrap();
         let to: Transcriber = parse2(to).unwrap();
-        let to = to.nest(nest);
         let rule = Rule::new(from, to).unwrap();
+        let rule = rule.nest(nest);
         let actual = rule.replace_all_str(input).unwrap();
         assert_eq!(actual, expect, "replace_all_str tokens {msg}");
 
