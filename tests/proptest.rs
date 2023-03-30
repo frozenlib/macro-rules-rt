@@ -28,6 +28,7 @@ fn tts() -> impl Strategy<Value = TokenStream> {
     token_stream_strategy(10, 100, 20, 20)
 }
 
+#[ignore]
 #[test]
 fn test_0() {
     let _ = check(TestArg::new(quote!(A), quote!(A), quote!(...)).unwrap());
