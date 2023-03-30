@@ -4,7 +4,7 @@ use crate::{
     },
     token_entry::TokenStringBuilder,
     utils::{to_close_str, to_open_str, RangeBuilder},
-    ParseStreamEx, Source,
+    ParseStreamEx, Rule, Source,
 };
 use proc_macro2::{Delimiter, Group, Ident, Span, TokenStream, TokenTree};
 use quote::{ToTokens, TokenStreamExt};
@@ -59,8 +59,19 @@ impl Transcriber {
     pub(crate) fn apply_tokens_to(&self, m: &RawMatch, b: &mut MatchTokensBuilder) {
         self.items.apply_tokens_to(m, b)
     }
-    pub(crate) fn apply_string(&self, m: &RawMatch, mut b: MatchStringBuilder) {
-        b.is_ready_string = self.is_ready_string;
+    pub(crate) fn apply_string(
+        &self,
+        m: &RawMatch,
+        rule: &Rule,
+        tes_len: usize,
+        b: &mut TokenStringBuilder,
+    ) {
+        let mut b = MatchStringBuilder {
+            b,
+            rule,
+            tes_len,
+            is_ready_string: self.is_ready_string,
+        };
         self.items.apply_string(m, &mut b)
     }
 }

@@ -125,13 +125,7 @@ impl FindAllPartMatch {
     }
     fn apply_string(&self, rule: &Rule, b: &mut FindAllStringBuilder) {
         b.commit_no_match(self.tes_len);
-        let b = MatchStringBuilder {
-            b: b.b,
-            rule,
-            tes_len: self.tes_len,
-            is_ready_string: false,
-        };
-        rule.to.apply_string(&self.m, b);
+        rule.to.apply_string(&self.m, rule, self.tes_len, b.b);
     }
 }
 
