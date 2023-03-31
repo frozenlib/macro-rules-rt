@@ -1,10 +1,11 @@
 use crate::{
+    match_all::MatchAllBuilder,
     token_entry::{
         cts_len, CursorToken, CursorTokenTree, FindAllStringBuilder, LongToken, LongTokenTree,
-        ParseStreamEx, TokenEntry, TokenStringBuilder,
+        ParseStreamEx, Source, TokenEntry, TokenStringBuilder,
     },
     utils::{parse_macro_stmt, to_delimiter},
-    Rule,
+    MatchAll, Rule,
 };
 use proc_macro2::{Delimiter, Group, Span, TokenStream};
 use quote::{ToTokens, TokenStreamExt};
@@ -76,7 +77,7 @@ impl FindAllParts {
         for p in &self.0 {
             match p {
                 FindAllPart::NoMatch(p) => b.push_no_match(p.tts_and_tes_len),
-                FindAllPart::Match(p) => p.apply_string(rule, b),
+                FindAllPart::Match(p) => p.apply_string_for_find_all(rule, b),
                 FindAllPart::GroupOpen | FindAllPart::GroupClose => b.push_no_match(1),
             }
         }
@@ -106,10 +107,10 @@ impl FindAllPartNoMatch {
 }
 
 #[derive(Debug)]
-struct FindAllPartMatch {
+pub struct FindAllPartMatch {
     m: RawMatch,
     cts_len: usize,
-    tes_len: usize,
+    pub(crate) tes_len: usize,
 }
 impl FindAllPartMatch {
     fn apply_tokens_to(&self, input: ParseStream, rule: &Rule, tokens: &mut TokenStream) {
@@ -123,9 +124,12 @@ impl FindAllPartMatch {
         };
         rule.to.apply_tokens_to(&self.m, &mut b);
     }
-    fn apply_string(&self, rule: &Rule, b: &mut FindAllStringBuilder) {
+    fn apply_string_for_find_all(&self, rule: &Rule, b: &mut FindAllStringBuilder) {
         b.commit_no_match(self.tes_len);
-        rule.to.apply_string(&self.m, rule, self.tes_len, b.b);
+        self.apply_string(rule, b.b)
+    }
+    pub(crate) fn apply_string(&self, rule: &Rule, b: &mut TokenStringBuilder) {
+        rule.to.apply_string(&self.m, rule, self.tes_len, b);
     }
 }
 
@@ -217,6 +221,24 @@ impl Matcher {
         }
         parts.push(FindAllPart::NoMatch(FindAllPartNoMatch { tts_and_tes_len }));
         is_match
+    }
+
+    pub(crate) fn match_all<'a>(
+        &'a self,
+        source: Source<'a>,
+        input: TokenStream,
+        rule: &'a Rule,
+    ) -> MatchAll<'a> {
+        let mut b = MatchAllBuilder::new(source);
+        let ps = self.find_all(input, 0);
+        for p in ps.0 {
+            match p {
+                FindAllPart::NoMatch(n) => b.push_no_match(n.tts_and_tes_len),
+                FindAllPart::Match(m) => b.push_match(m),
+                FindAllPart::GroupOpen | FindAllPart::GroupClose => b.push_no_match(1),
+            }
+        }
+        b.finish(rule)
     }
 }
 fn match_part(m: RawMatch, start: Cursor, end: Cursor) -> FindAllPartMatch {

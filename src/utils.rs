@@ -73,3 +73,7 @@ pub fn to_close_str(d: Delimiter) -> &'static str {
         Delimiter::None => "",
     }
 }
+
+pub fn is_empty(range: &Range<usize>) -> bool {
+    range.start == range.end
+}

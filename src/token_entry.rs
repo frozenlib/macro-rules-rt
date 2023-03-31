@@ -419,9 +419,9 @@ impl<'a> Source<'a> {
         Ok((Self { text, tes, offsets }, tokens))
     }
 
-    fn get(&self, range: Range<usize>) -> (&[TokenEntry], &str, &[TokenEntry]) {
-        let mut start = range.start;
-        let mut end = range.end;
+    fn get(&self, tes_range: Range<usize>) -> (&[TokenEntry], &str, &[TokenEntry]) {
+        let mut start = tes_range.start;
+        let mut end = tes_range.end;
         let mut start_offset = None;
         let mut end_offset = None;
         while start < end {
@@ -443,7 +443,29 @@ impl<'a> Source<'a> {
         } else {
             ""
         };
-        (&self.tes[range.start..start], s, &self.tes[end..range.end])
+        (
+            &self.tes[tes_range.start..start],
+            s,
+            &self.tes[end..tes_range.end],
+        )
+    }
+    pub fn unchanged_tes_range_in(&self, tes_range: Range<usize>) -> Range<usize> {
+        let mut start = tes_range.start;
+        let mut end = tes_range.end;
+        while start < end && self.offsets.0[start].is_none() {
+            start += 1;
+        }
+        while start < end && self.offsets.0[end].is_none() {
+            end -= 1;
+        }
+        start..end
+    }
+
+    pub fn get_source(&self, tes_range: Range<usize>) -> &str {
+        let s = self.get(tes_range);
+        assert!(s.0.is_empty());
+        assert!(s.2.is_empty());
+        s.1
     }
 }
 

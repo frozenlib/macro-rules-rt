@@ -1,5 +1,6 @@
 #![warn(clippy::redundant_pub_crate)]
 
+use match_all::MatchAll;
 use matcher::MatchTokensBuilder;
 use proc_macro2::TokenStream;
 use syn::Result;
@@ -11,6 +12,7 @@ pub use transcriber::Transcriber;
 #[macro_use]
 mod utils;
 
+pub mod match_all;
 mod matcher;
 mod text;
 mod token_entry;
@@ -77,6 +79,11 @@ impl Rule {
             .find_all(input, 0)
             .apply_string(self, &mut FindAllStringBuilder::new(&mut b, 0));
         Ok(b.s)
+    }
+
+    pub fn match_all<'a>(&'a self, input: &'a str) -> Result<MatchAll<'a>> {
+        let (source, input) = Source::from_str(input)?;
+        Ok(self.from.match_all(source, input, self))
     }
 
     /// If the entire `input` matches the entire `from`, do the conversion. Otherwise, return an error.
