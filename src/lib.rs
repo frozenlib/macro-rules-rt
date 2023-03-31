@@ -81,6 +81,7 @@ impl Rule {
         Ok(b.s)
     }
 
+    /// Replaces all non-overlapping matches in input with the provided transcriber, and returns detailed information.
     pub fn match_all<'a>(&'a self, input: &'a str) -> Result<MatchAll<'a>> {
         let (source, input) = Source::from_str(input)?;
         Ok(self.from.match_all(source, input, self))

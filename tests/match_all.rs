@@ -8,10 +8,10 @@ enum Part {
     Changed(Changed),
 }
 impl Part {
-    fn from(value: match_all::Part) -> Self {
+    fn from(value: match_all::MatchAllPart) -> Self {
         match value {
-            match_all::Part::Unchanged(u) => Self::Unchanged(u.source_str().to_string()),
-            match_all::Part::Changed(c) => Self::Changed(Changed::from(c)),
+            match_all::MatchAllPart::Unchanged(u) => Self::Unchanged(u.source_str().to_string()),
+            match_all::MatchAllPart::Changed(c) => Self::Changed(Changed::from(c)),
         }
     }
 }
@@ -26,7 +26,7 @@ impl Changed {
     fn from(value: match_all::Changed) -> Self {
         let source_str = value.source_str().to_string();
         let replacement_str = value.replacement_str();
-        let replacements = value.replacements().map(Replacement::from).collect();
+        let replacements = value.iter().map(Replacement::from).collect();
         Self {
             source_str,
             replacement_str,
@@ -41,10 +41,10 @@ enum Replacement {
     Transform(String),
 }
 impl Replacement {
-    fn from(value: match_all::Replacement) -> Self {
+    fn from(value: match_all::ChangedPart) -> Self {
         match value {
-            match_all::Replacement::Match(m) => Self::Match(m.to_string()),
-            match_all::Replacement::Transform(t) => Self::Transform(t.to_string()),
+            match_all::ChangedPart::Match(m) => Self::Match(m.to_string()),
+            match_all::ChangedPart::Transform(t) => Self::Transform(t.to_string()),
         }
     }
 }

@@ -1,3 +1,5 @@
+//! Types used in [`Rule::match_all`] results.
+
 use crate::{
     matcher::FindAllPartMatch,
     token_entry::{Source, TokenStringBuilder},
@@ -88,6 +90,7 @@ impl<'a> MatchAllBuilder<'a> {
     }
 }
 
+/// Result of [`Rule::match_all`]
 pub struct MatchAll<'a> {
     source: Source<'a>,
     rule: &'a Rule,
@@ -95,15 +98,15 @@ pub struct MatchAll<'a> {
 }
 
 impl<'a> MatchAll<'a> {
-    pub fn iter(&self) -> impl Iterator<Item = Part> {
+    pub fn iter(&self) -> impl Iterator<Item = MatchAllPart> {
         self.parts
             .iter()
             .map(|part| match part {
-                RawPart::Unchanged { tes_range } => Part::Unchanged(Unchanged {
+                RawPart::Unchanged { tes_range } => MatchAllPart::Unchanged(Unchanged {
                     ma: self,
                     tes_range: tes_range.clone(),
                 }),
-                RawPart::Changed(p) => Part::Changed(Changed { ma: self, p }),
+                RawPart::Changed(p) => MatchAllPart::Changed(Changed { ma: self, p }),
             })
             .collect::<Vec<_>>()
             .into_iter()
@@ -127,11 +130,13 @@ struct RawChangedPart {
     m: Option<FindAllPartMatch>,
 }
 
-pub enum Part<'a> {
+/// A part of the result of [`Rule::match_all`].
+pub enum MatchAllPart<'a> {
     Unchanged(Unchanged<'a>),
     Changed(Changed<'a>),
 }
 
+/// Range over which no conversion was performed.
 pub struct Unchanged<'a> {
     ma: &'a MatchAll<'a>,
     tes_range: Range<usize>,
@@ -141,15 +146,20 @@ impl<'a> Unchanged<'a> {
         self.ma.source.get_source(self.tes_range.clone())
     }
 }
+
+/// Range where conversion was performed.
 pub struct Changed<'a> {
     ma: &'a MatchAll<'a>,
     p: &'a RawChanged,
 }
 
 impl<'a> Changed<'a> {
+    /// Obtain the pre-conversion string corresponding to this range.
     pub fn source_str(&self) -> &str {
         self.ma.source.get_source(self.p.tes_range.clone())
     }
+
+    /// Obtain the converted string corresponding to this range.
     pub fn replacement_str(&self) -> String {
         let mut b = TokenStringBuilder::new(&self.ma.source);
         for p in &self.p.parts {
@@ -161,13 +171,13 @@ impl<'a> Changed<'a> {
         }
         b.s
     }
-    pub fn replacements(&self) -> impl Iterator<Item = Replacement> {
+    pub fn iter(&self) -> impl Iterator<Item = ChangedPart> {
         let ma = &self.ma;
         self.p.parts.iter().map(|p| {
             if let Some(m) = &p.m {
-                Replacement::Match(Match { ma, m })
+                ChangedPart::Match(Match { ma, m })
             } else {
-                Replacement::Transform(Transform {
+                ChangedPart::Transform(Transform {
                     ma,
                     tes_range: p.tes_range.clone(),
                 })
@@ -176,11 +186,13 @@ impl<'a> Changed<'a> {
     }
 }
 
-pub enum Replacement<'a> {
+/// Range where conversion was performed for a specific reason.
+pub enum ChangedPart<'a> {
     Transform(Transform<'a>),
     Match(Match<'a>),
 }
 
+/// Range where conversion was performed when creating `TokenStream` from a string, and did not match the search criteria.
 pub struct Transform<'a> {
     ma: &'a MatchAll<'a>,
     tes_range: Range<usize>,
@@ -195,6 +207,7 @@ impl<'a> Transform<'a> {
     }
 }
 
+/// Range where the search criteria were met, and replacement was performed.
 pub struct Match<'a> {
     ma: &'a MatchAll<'a>,
     m: &'a FindAllPartMatch,
