@@ -33,7 +33,6 @@ impl<'a> MatchAllBuilder<'a> {
         }
     }
     pub fn push_no_match(&mut self, tes_len: usize) {
-        println!("push_no_match({})", tes_len);
         self.no_match_tes_end += tes_len;
     }
     fn commit_no_match(&mut self) {
@@ -48,8 +47,6 @@ impl<'a> MatchAllBuilder<'a> {
         self.no_match_tes_end = tes_offset;
     }
     pub fn push_match(&mut self, m: FindAllPartMatch) {
-        print!("push_match({:#?})", m);
-
         self.commit_no_match();
         let tes_start = self.no_match_tes_end;
         let tes_end = tes_start + m.tes_len;
