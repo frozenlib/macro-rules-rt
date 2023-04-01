@@ -142,7 +142,7 @@ pub struct Unchanged<'a> {
     tes_range: Range<usize>,
 }
 impl<'a> Unchanged<'a> {
-    pub fn source_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         self.ma.source.get_source(self.tes_range.clone())
     }
 }
@@ -155,12 +155,12 @@ pub struct Changed<'a> {
 
 impl<'a> Changed<'a> {
     /// Obtain the pre-conversion string corresponding to this range.
-    pub fn source_str(&self) -> &str {
+    pub fn input(&self) -> &str {
         self.ma.source.get_source(self.p.tes_range.clone())
     }
 
     /// Obtain the converted string corresponding to this range.
-    pub fn replacement_str(&self) -> String {
+    pub fn output(&self) -> String {
         let mut b = TokenStringBuilder::new(&self.ma.source);
         for p in &self.p.parts {
             if let Some(m) = &p.m {

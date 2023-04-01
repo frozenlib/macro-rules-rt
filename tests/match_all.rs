@@ -10,7 +10,7 @@ enum Part {
 impl Part {
     fn from(value: match_all::MatchAllPart) -> Self {
         match value {
-            match_all::MatchAllPart::Unchanged(u) => Self::Unchanged(u.source_str().to_string()),
+            match_all::MatchAllPart::Unchanged(u) => Self::Unchanged(u.as_str().to_string()),
             match_all::MatchAllPart::Changed(c) => Self::Changed(Changed::from(c)),
         }
     }
@@ -24,8 +24,8 @@ struct Changed {
 }
 impl Changed {
     fn from(value: match_all::Changed) -> Self {
-        let source_str = value.source_str().to_string();
-        let replacement_str = value.replacement_str();
+        let source_str = value.input().to_string();
+        let replacement_str = value.output();
         let replacements = value.iter().map(Replacement::from).collect();
         Self {
             source_str,
