@@ -10,7 +10,7 @@ enum Part {
 impl Part {
     fn from(value: match_all::MatchAllPart) -> Self {
         match value {
-            match_all::MatchAllPart::Unchanged(u) => Self::Unchanged(u.as_str().to_string()),
+            match_all::MatchAllPart::Unchanged(u) => Self::Unchanged(u.to_string()),
             match_all::MatchAllPart::Changed(c) => Self::Changed(Changed::from(c)),
         }
     }

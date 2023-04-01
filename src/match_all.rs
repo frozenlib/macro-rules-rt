@@ -6,7 +6,11 @@ use crate::{
     utils::is_empty,
     Rule,
 };
-use std::{mem::take, ops::Range};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    mem::take,
+    ops::Range,
+};
 
 #[derive(Debug)]
 pub(crate) struct MatchAllBuilder<'a> {
@@ -112,6 +116,11 @@ impl<'a> MatchAll<'a> {
             .into_iter()
     }
 }
+impl Debug for MatchAll<'_> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
 
 #[derive(Debug)]
 enum RawPart {
@@ -131,6 +140,7 @@ struct RawChangedPart {
 }
 
 /// A part of the result of [`Rule::match_all`].
+#[derive(Debug)]
 pub enum MatchAllPart<'a> {
     Unchanged(Unchanged<'a>),
     Changed(Changed<'a>),
@@ -144,6 +154,16 @@ pub struct Unchanged<'a> {
 impl<'a> Unchanged<'a> {
     pub fn as_str(&self) -> &str {
         self.ma.source.get_source(self.tes_range.clone())
+    }
+}
+impl Display for Unchanged<'_> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+impl Debug for Unchanged<'_> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -185,8 +205,18 @@ impl<'a> Changed<'a> {
         })
     }
 }
+impl Debug for Changed<'_> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.debug_struct("Changed")
+            .field("input", &self.input())
+            .field("output", &self.output())
+            .field("iter", &self.iter().collect::<Vec<_>>())
+            .finish()
+    }
+}
 
 /// Range where conversion was performed for a specific reason.
+#[derive(Debug)]
 pub enum ChangedPart<'a> {
     Transform(Transform<'a>),
     Match(Match<'a>),
@@ -206,6 +236,11 @@ impl<'a> Transform<'a> {
         b.s
     }
 }
+impl Debug for Transform<'_> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str(&self.to_string())
+    }
+}
 
 /// Range where the search criteria were met, and replacement was performed.
 pub struct Match<'a> {
@@ -219,5 +254,10 @@ impl<'a> Match<'a> {
         let mut b = TokenStringBuilder::new(&self.ma.source);
         self.m.apply_string(self.ma.rule, &mut b);
         b.s
+    }
+}
+impl Debug for Match<'_> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str(&self.to_string())
     }
 }
