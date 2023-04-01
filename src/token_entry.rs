@@ -419,7 +419,7 @@ impl<'a> Source<'a> {
         Ok((Self { text, tes, offsets }, tokens))
     }
     pub fn as_str(&self) -> &str {
-        &self.text.str
+        self.text.str
     }
 
     fn get(&self, tes_range: Range<usize>) -> (&[TokenEntry], &str, &[TokenEntry]) {
