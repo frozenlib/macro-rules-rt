@@ -7,6 +7,7 @@ use crate::{
     Rule,
 };
 use std::{
+    borrow::Cow,
     fmt::{Debug, Display, Formatter},
     mem::take,
     ops::Range,
@@ -99,6 +100,19 @@ pub struct MatchAll<'a> {
 }
 
 impl<'a> MatchAll<'a> {
+    /// Obtain the pre-conversion string.
+    pub fn input(&self) -> &str {
+        self.source.as_str()
+    }
+
+    /// Obtain the converted string.
+    pub fn output(&self) -> String {
+        let mut b = TokenStringBuilder::new(&self.source);
+        for p in self.iter() {
+            p.output_to(&mut b);
+        }
+        b.s
+    }
     pub fn iter(&self) -> impl Iterator<Item = MatchAllPart> {
         self.parts
             .iter()
@@ -143,6 +157,30 @@ pub enum MatchAllPart<'a> {
     Changed(Changed<'a>),
 }
 
+impl<'a> MatchAllPart<'a> {
+    /// Obtain the pre-conversion string.
+    pub fn input(&self) -> &str {
+        match self {
+            MatchAllPart::Unchanged(u) => u.as_str(),
+            MatchAllPart::Changed(c) => c.input(),
+        }
+    }
+
+    /// Obtain the converted string.
+    pub fn output(&self) -> Cow<str> {
+        match self {
+            MatchAllPart::Unchanged(u) => Cow::Borrowed(u.as_str()),
+            MatchAllPart::Changed(c) => Cow::Owned(c.output()),
+        }
+    }
+    fn output_to(&self, sb: &mut TokenStringBuilder) {
+        match self {
+            MatchAllPart::Unchanged(u) => sb.push_str(u.as_str()),
+            MatchAllPart::Changed(c) => c.output_to(sb),
+        }
+    }
+}
+
 /// Range over which no conversion was performed.
 pub struct Unchanged<'a> {
     ma: &'a MatchAll<'a>,
@@ -179,15 +217,19 @@ impl<'a> Changed<'a> {
     /// Obtain the converted string corresponding to this range.
     pub fn output(&self) -> String {
         let mut b = TokenStringBuilder::new(&self.ma.source);
+        self.output_to(&mut b);
+        b.s
+    }
+    fn output_to(&self, b: &mut TokenStringBuilder) {
         for p in &self.p.parts {
             if let Some(m) = &p.m {
-                m.apply_string(self.ma.rule, &mut b);
+                m.apply_string(self.ma.rule, b);
             } else {
                 b.push_tes(p.tes_range.clone());
             }
         }
-        b.s
     }
+
     pub fn iter(&self) -> impl Iterator<Item = ChangedPart> {
         let ma = &self.ma;
         self.p.parts.iter().map(|p| {
