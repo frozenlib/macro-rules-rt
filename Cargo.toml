@@ -9,7 +9,7 @@ repository = "https://github.com/frozenlib/macro-rules-rt"
 documentation = "https://docs.rs/macro-rules-rt/"
 keywords = ["macro_rules"]
 categories = ["development-tools::procedural-macro-helpers"]
-description = "macro_rules available at runtime."
+description = "Transforms text or TokenStream using Rust's macro_rules syntax."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
