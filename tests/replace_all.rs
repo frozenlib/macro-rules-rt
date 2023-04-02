@@ -254,3 +254,8 @@ fn nest_yes() {
 fn to_long_punct() {
     check("x", "..=", "x", "..=");
 }
+
+#[test]
+fn to_long_punct_tt() {
+    check("$t:tt", "$t", "..=", "..=");
+}
