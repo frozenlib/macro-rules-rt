@@ -1,7 +1,7 @@
 use macro_rules_rt::{Matcher, Rule, Transcriber};
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::quote;
-use syn::parse2;
+use syn::{parse::Parser, parse2};
 
 macro_rules! check { {
         { $($from:tt)* },
@@ -20,7 +20,7 @@ fn check_eq(from: TokenStream, to: TokenStream, input: TokenStream, expected: To
     let to_str = to.to_string();
     let input_str = input.to_string();
     let from = parse2::<Matcher>(from).expect("invalid matcher.");
-    let to = parse2::<Transcriber>(to).expect("invalid transcriber.");
+    let to = Transcriber::parse.parse2(to).expect("invalid transcriber.");
     let rule = Rule::new(from, to).expect("new rule failed.");
     let actual = rule.replace_all_tokens(input).to_string();
     let expected = expected.to_string();

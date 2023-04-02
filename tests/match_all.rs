@@ -1,6 +1,6 @@
 use macro_rules_rt::{match_all, Rule};
 use pretty_assertions::assert_eq;
-use syn::{parse_str, Result};
+use syn::Result;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Part {
@@ -68,7 +68,7 @@ fn t(s: &str) -> Replacement {
 
 #[track_caller]
 fn check_raw(from: &str, to: &str, input: &str, expect: &[Part]) -> Result<()> {
-    let rule = Rule::new(parse_str(from)?, parse_str(to)?)?;
+    let rule = Rule::new(from.parse()?, to.parse()?)?;
     let m = rule.match_all(input)?;
     let actual: Vec<_> = m.iter().map(Part::from).collect();
     assert_eq!(actual, expect);
@@ -100,7 +100,7 @@ fn test_transform() {
     let e = [changed(
         "/// xxx",
         "# [ docx = \" xxx\" ]",
-        &[t("# ["), m("docx ="), t("\" xxx\" ]")],
+        &[t("# ["), m("docx = "), t("\" xxx\" ]")],
     )];
     check("doc = ", "docx = ", "/// xxx", &e)
 }
@@ -112,7 +112,7 @@ fn test_unchanged_and_transform() {
         changed(
             "/// xxx",
             "# [ docx = \" xxx\" ]",
-            &[t("# ["), m("docx ="), t("\" xxx\" ]")],
+            &[t("# ["), m("docx = "), t("\" xxx\" ]")],
         ),
     ];
     check("doc = ", "docx = ", "@@\n/// xxx", &e)

@@ -28,18 +28,12 @@ pub struct Transcriber {
     is_ready_string: bool,
 }
 
-impl Parse for Transcriber {
-    fn parse(input: ParseStream) -> Result<Self> {
-        Self::parse(&mut ParseStreamEx::new(input, 0))
-    }
-}
-
 impl FromStr for Transcriber {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
         let (source, input) = Source::from_str(s)?;
-        let mut to = ParseStreamEx::parse_from_tokens(input, 0, Self::parse)?;
+        let mut to = ParseStreamEx::parse_from_tokens(input, 0, Self::parse_ex)?;
         to.items.ready_string(&source);
         to.is_ready_string = true;
         Ok(to)
@@ -47,7 +41,10 @@ impl FromStr for Transcriber {
 }
 
 impl Transcriber {
-    fn parse(input: &mut ParseStreamEx) -> Result<Self> {
+    pub fn parse(input: ParseStream) -> Result<Self> {
+        Self::parse_ex(&mut ParseStreamEx::new(input, 0))
+    }
+    fn parse_ex(input: &mut ParseStreamEx) -> Result<Self> {
         Ok(Self {
             items: TranscriberItems::parse(input)?,
             is_ready_string: false,

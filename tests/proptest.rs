@@ -15,7 +15,7 @@ use proptest::{
     strategy::{BoxedStrategy, Strategy},
 };
 use quote::{quote, ToTokens};
-use syn::parse2;
+use syn::{parse::Parser, parse2};
 use test_strategy::{proptest, Arbitrary};
 
 #[ignore]
@@ -53,7 +53,10 @@ struct TestArg {
 
 impl TestArg {
     fn new(from: TokenStream, to: TokenStream, input: TokenStream) -> syn::Result<Self> {
-        let rule = Rule::new(parse2(from.clone())?, parse2(to.clone())?)?;
+        let rule = Rule::new(
+            parse2(from.clone())?,
+            Transcriber::parse.parse2(to.clone())?,
+        )?;
         Ok(Self {
             from,
             to,
@@ -75,7 +78,7 @@ impl Arbitrary for TestArg {
             }
         });
         let to = tts().prop_filter_map("transcriber", |tokens| {
-            if let Ok(t) = parse2::<Transcriber>(tokens.clone()) {
+            if let Ok(t) = Transcriber::parse.parse2(tokens.clone()) {
                 Some((t, tokens))
             } else {
                 None

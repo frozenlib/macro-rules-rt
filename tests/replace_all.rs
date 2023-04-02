@@ -1,6 +1,6 @@
 use macro_rules_rt::{Matcher, Rule, Transcriber};
 use proc_macro2::TokenStream;
-use syn::{parse2, parse_str};
+use syn::{parse::Parser, parse2, parse_str};
 
 #[track_caller]
 fn check(from: &str, to: &str, input: &str, expect: &str) {
@@ -27,7 +27,7 @@ input = {input}"
         let from: TokenStream = parse_str(from).unwrap();
         let from: Matcher = parse2(from).unwrap();
         let to: TokenStream = parse_str(to).unwrap();
-        let to: Transcriber = parse2(to).unwrap();
+        let to = Transcriber::parse.parse2(to).unwrap();
         let rule = Rule::new(from, to).unwrap();
         let rule = rule.nest(nest);
         let actual = rule.replace_all(input).unwrap();
