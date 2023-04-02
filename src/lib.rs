@@ -88,18 +88,29 @@ impl Rule {
     }
 
     /// If the entire `input` matches the entire `from`, do the conversion. Otherwise, return an error.
-    pub fn apply_tokens(&self, input: TokenStream) -> Result<TokenStream> {
+    pub fn apply(&self, input: &str) -> Result<String> {
+        let (source, input) = Source::from_str(input)?;
         ParseStreamEx::parse_from_tokens(input, 0, |input: &mut ParseStreamEx| {
-            self.apply_parser(input)
+            let m = self.from.try_match(input)?;
+            let mut b = TokenStringBuilder::new(&source);
+            self.to.apply_string(&m, self, usize::MAX, &mut b);
+            Ok(b.s)
         })
     }
-    fn apply_parser(&self, input: &mut ParseStreamEx) -> Result<TokenStream> {
+
+    /// If the entire `input` matches the entire `from`, do the conversion. Otherwise, return an error.
+    pub fn apply_tokens(&self, input: TokenStream) -> Result<TokenStream> {
+        ParseStreamEx::parse_from_tokens(input, 0, |input: &mut ParseStreamEx| {
+            self.apply_tokens_parser(input)
+        })
+    }
+    fn apply_tokens_parser(&self, input: &mut ParseStreamEx) -> Result<TokenStream> {
         let m = self.from.try_match(input)?;
         let mut tokens = TokenStream::new();
         let mut b = MatchTokensBuilder {
             tokens: &mut tokens,
             rule: self,
-            tes_len: 0,
+            tes_len: usize::MAX,
         };
         self.to.apply_tokens_to(&m, &mut b);
         Ok(tokens)
