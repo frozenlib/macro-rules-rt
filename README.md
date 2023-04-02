@@ -4,7 +4,7 @@
 [![Docs.rs](https://docs.rs/macro-rules-rt/badge.svg)](https://docs.rs/macro-rules-rt/)
 [![Actions Status](https://github.com/frozenlib/macro-rules-rt/workflows/CI/badge.svg)](https://github.com/frozenlib/macro-rules-rt/actions)
 
-`macro-rules-rt` is a crate that transforms Rust source code using the syntax used in `macro-rules`.
+`macro-rules-rt` is a crate that transforms Rust source code using the syntax used in `macro_rules`.
 
 ## Example
 
