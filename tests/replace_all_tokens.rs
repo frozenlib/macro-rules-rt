@@ -22,7 +22,7 @@ fn check_eq(from: TokenStream, to: TokenStream, input: TokenStream, expected: To
     let from = parse2::<Matcher>(from).expect("invalid matcher.");
     let to = parse2::<Transcriber>(to).expect("invalid transcriber.");
     let rule = Rule::new(from, to).expect("new rule failed.");
-    let actual = rule.replace_all(input).to_string();
+    let actual = rule.replace_all_tokens(input).to_string();
     let expected = expected.to_string();
     assert_eq!(
         actual, expected,

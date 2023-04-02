@@ -62,7 +62,7 @@ impl Rule {
     }
 
     /// Replaces all non-overlapping matches in `input` with the provided transcriber.
-    pub fn replace_all(&self, input: TokenStream) -> TokenStream {
+    pub fn replace_all_tokens(&self, input: TokenStream) -> TokenStream {
         self.from
             .find_all(input.clone(), 0)
             .apply_tokens(&mut 0, input, self)
@@ -72,7 +72,7 @@ impl Rule {
     ///
     /// Unlike creating `TokenStream` from `str` and then calling [`Rule::replace_all`],
     /// the original string is preserved as much as possible.
-    pub fn replace_all_str(&self, input: &str) -> Result<String> {
+    pub fn replace_all(&self, input: &str) -> Result<String> {
         let (source, input) = Source::from_str(input)?;
         let mut b = TokenStringBuilder::new(&source);
         self.from
@@ -88,7 +88,7 @@ impl Rule {
     }
 
     /// If the entire `input` matches the entire `from`, do the conversion. Otherwise, return an error.
-    pub fn apply(&self, input: TokenStream) -> Result<TokenStream> {
+    pub fn apply_tokens(&self, input: TokenStream) -> Result<TokenStream> {
         ParseStreamEx::parse_from_tokens(input, 0, |input: &mut ParseStreamEx| {
             self.apply_parser(input)
         })

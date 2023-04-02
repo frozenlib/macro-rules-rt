@@ -20,7 +20,7 @@ input = {input}"
         let to: Transcriber = to.parse().unwrap();
         let rule = Rule::new(from, to).unwrap();
         let rule = rule.nest(nest);
-        let actual = rule.replace_all_str(input).unwrap();
+        let actual = rule.replace_all(input).unwrap();
         assert_eq!(actual, expect, "replace_all_str str {msg}");
     }
     {
@@ -30,12 +30,12 @@ input = {input}"
         let to: Transcriber = parse2(to).unwrap();
         let rule = Rule::new(from, to).unwrap();
         let rule = rule.nest(nest);
-        let actual = rule.replace_all_str(input).unwrap();
+        let actual = rule.replace_all(input).unwrap();
         assert_eq!(actual, expect, "replace_all_str tokens {msg}");
 
         let input: TokenStream = input.parse().unwrap();
         let expect: TokenStream = expect.parse().unwrap();
-        let actual = rule.replace_all(input);
+        let actual = rule.replace_all_tokens(input);
         assert_eq!(actual.to_string(), expect.to_string(), "replace_all {msg}");
     }
 }

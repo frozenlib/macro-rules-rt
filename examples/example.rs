@@ -8,7 +8,7 @@ fn main() -> syn::Result<()> {
     let rule = Rule::new(from, to)?;
     let source = quote!(1 + 2);
     let expect = quote!(1 * 5 + 2 * 5);
-    let result = rule.replace_all(source);
+    let result = rule.replace_all_tokens(source);
     assert_eq!(result.to_string(), expect.to_string());
     Ok(())
 }

@@ -124,7 +124,7 @@ fn check(arg: TestArg) -> anyhow::Result<()> {
         input,
         rule,
     } = arg;
-    let result = rule.apply(input.clone());
+    let result = rule.apply_tokens(input.clone());
 
     let mut main_src = p.clone();
     main_src.push("src");
