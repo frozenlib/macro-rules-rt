@@ -51,8 +51,8 @@ impl Rule {
     /// let to   = "b + $e".parse()?;
     /// let input = "a + a + x";
     /// let rule = Rule::new(from, to)?;
-    /// let r_nest_no = rule.clone().replace_all_str(input)?;
-    /// let r_nest_yes = rule.nest(true).replace_all_str(input)?;
+    /// let r_nest_no = rule.clone().replace_all(input)?;
+    /// let r_nest_yes = rule.nest(true).replace_all(input)?;
     /// assert_eq!(r_nest_no,  "b + a + x");
     /// assert_eq!(r_nest_yes, "b + b + x");
     /// # Ok::<(), syn::Error>(())
