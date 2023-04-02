@@ -41,6 +41,11 @@ impl FromStr for Transcriber {
 }
 
 impl Transcriber {
+    /// Parse a transcriber.
+    ///
+    /// Unlike [`FromStr::from_str`], non-token information, such as whitespace, is lost.
+    ///
+    /// `Transcriber` does not implement [`Parse`](syn::parse::Parse) to prevent information loss using [`parse_str`](syn::parse_str).
     pub fn parse(input: ParseStream) -> Result<Self> {
         Self::parse_ex(&mut ParseStreamEx::new(input, 0))
     }
