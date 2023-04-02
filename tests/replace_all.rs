@@ -21,7 +21,23 @@ input = {input}"
         let rule = Rule::new(from, to).unwrap();
         let rule = rule.nest(nest);
         let actual = rule.replace_all(input).unwrap();
-        assert_eq!(actual, expect, "replace_all str {msg}");
+        assert_eq!(actual, expect, "replace_all {msg}");
+    }
+    {
+        let from: Matcher = from.parse().unwrap();
+        let to: TokenStream = parse_str(to).unwrap();
+        let to = Transcriber::parse.parse2(to).unwrap();
+        let rule = Rule::new(from, to).unwrap();
+        let rule = rule.nest(nest);
+
+        let input: TokenStream = input.parse().unwrap();
+        let expect: TokenStream = expect.parse().unwrap();
+        let actual = rule.replace_all_tokens(input);
+        assert_eq!(
+            actual.to_string(),
+            expect.to_string(),
+            "replace_all tokens_transcriber {msg}"
+        );
     }
     {
         let from: TokenStream = parse_str(from).unwrap();
@@ -31,7 +47,7 @@ input = {input}"
         let rule = Rule::new(from, to).unwrap();
         let rule = rule.nest(nest);
         let actual = rule.replace_all(input).unwrap();
-        assert_eq!(actual, expect, "replace_all tokens {msg}");
+        assert_eq!(actual, expect, "replace_all_tokens {msg}");
 
         let input: TokenStream = input.parse().unwrap();
         let expect: TokenStream = expect.parse().unwrap();
@@ -232,4 +248,9 @@ fn nest_yes() {
         "b + ( b + x )",
         true,
     );
+}
+
+#[test]
+fn to_long_punct() {
+    check("x", "..=", "x", "..=");
 }
