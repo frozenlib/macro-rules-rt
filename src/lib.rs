@@ -61,13 +61,6 @@ impl Rule {
         Self { nest: yes, ..self }
     }
 
-    /// Replaces all non-overlapping matches in `input` with the provided transcriber.
-    pub fn replace_all_tokens(&self, input: TokenStream) -> TokenStream {
-        self.from
-            .find_all(input.clone(), 0)
-            .apply_tokens(&mut 0, input, self)
-    }
-
     /// Replaces all non-overlapping matches in input with the provided transcriber.
     ///
     /// Unlike creating `TokenStream` from `str` and then calling [`Rule::replace_all`],
@@ -79,6 +72,13 @@ impl Rule {
             .find_all(input, 0)
             .apply_string(self, &mut FindAllStringBuilder::new(&mut b, 0));
         Ok(b.s)
+    }
+
+    /// Replaces all non-overlapping matches in `input` with the provided transcriber.
+    pub fn replace_all_tokens(&self, input: TokenStream) -> TokenStream {
+        self.from
+            .find_all(input.clone(), 0)
+            .apply_tokens(&mut 0, input, self)
     }
 
     /// Replaces all non-overlapping matches in input with the provided transcriber, and returns detailed information.
