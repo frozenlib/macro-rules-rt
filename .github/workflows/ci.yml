@@ -3,7 +3,7 @@ name: CI
 on:
   push:
   pull_request:
-  schedule: [cron: "20 5 * * *"]
+  schedule: [cron: "50 10 * * *"]
 
 jobs:
   build:
