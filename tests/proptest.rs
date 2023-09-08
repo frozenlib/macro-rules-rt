@@ -188,6 +188,7 @@ fn token_stream_strategy(
         .prop_map(expand_none_group)
 }
 
+#[allow(clippy::arc_with_non_send_sync)]
 fn token_leaf_strategy() -> impl Strategy<Value = TokenTree> {
     prop_oneof![
         ident_strategy().prop_map(TokenTree::Ident),
