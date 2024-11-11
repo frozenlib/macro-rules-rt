@@ -63,7 +63,7 @@ impl Rule {
 
     /// Replaces all non-overlapping matches in input with the provided transcriber.
     ///
-    /// Unlike creating `TokenStream` from `str` and then calling [`Rule::replace_all`],
+    /// Unlike creating `TokenStream` from `str` and then calling [`Rule::replace_all_tokens`],
     /// the original string is preserved as much as possible.
     pub fn replace_all(&self, input: &str) -> Result<String> {
         let (source, input) = Source::from_str(input)?;
