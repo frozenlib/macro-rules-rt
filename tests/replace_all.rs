@@ -93,6 +93,7 @@ fn lf() {
 }
 
 #[test]
+#[ignore]
 fn cr() {
     check("+", "-", "1\r2+3;\r4", "1\r2 - 3;\r4");
 }

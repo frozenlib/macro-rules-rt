@@ -71,11 +71,30 @@ fn metavariable_block() {
 }
 
 #[test]
-fn metavariable_stmt() {
+fn metavariable_stmt_expr() {
     check! {
         { $a:stmt },
         { $a @@ },
         { let x = 10 },
+    };
+}
+
+#[test]
+fn metavariable_stmt_struct() {
+    check! {
+        { $a:stmt },
+        { $a @@ },
+        { struct X; },
+    };
+}
+
+#[test]
+#[ignore]
+fn metavariable_stmt() {
+    check! {
+        { $($a:stmt)* },
+        { $($a; @@)*  },
+        { let x = 10; },
     };
 }
 
